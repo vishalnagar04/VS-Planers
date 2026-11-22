@@ -1,0 +1,3342 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VS Planer • 2D &amp; 3D Architectural Naksha Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      background: linear-gradient(135deg, #f3e8ff 0%, #e0f2fe 45%, #ecfdf5 100%);
+      color: #1e1b4b;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    @keyframes springPop {
+      0% { opacity: 0; transform: scale(0.92) translateY(14px); }
+      70% { opacity: 1; transform: scale(1.02) translateY(-2px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+    }
+    .animate-spring { animation: springPop 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .animate-float { animation: floatSlow 3s ease-in-out infinite; }
+    .candy-card {
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+      border: 2px solid rgba(168, 85, 247, 0.16);
+      border-radius: 1.25rem;
+      box-shadow: 0 10px 26px -6px rgba(88, 28, 135, 0.12);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .candy-card:hover {
+      border-color: rgba(168, 85, 247, 0.35);
+      box-shadow: 0 14px 30px -6px rgba(88, 28, 135, 0.18);
+    }
+    .candy-btn {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, filter 0.15s ease;
+    }
+    .candy-btn:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.02);
+      filter: brightness(1.04);
+    }
+    .candy-btn:active:not(:disabled) {
+      transform: translateY(1px) scale(0.97);
+    }
+    .candy-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f5f3ff; border-radius: 999px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #c084fc; border-radius: 999px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #9333ea; }
+    canvas { touch-action: none; }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #ffffff !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Toast Notification -->
+  <div id="toastBox" class="fixed bottom-5 right-5 z-[120] pointer-events-none flex flex-col gap-2 max-w-sm"></div>
+
+  <!-- Top Header -->
+  <header class="no-print sticky top-0 z-40 bg-gradient-to-r from-violet-700 via-fuchsia-600 to-indigo-700 text-white shadow-xl border-b-2 border-white/25">
+    <div class="max-w-[1600px] mx-auto px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+      <!-- Brand -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-pink-400 to-emerald-400 flex items-center justify-center text-purple-950 font-black text-lg shadow-lg border-2 border-white animate-float">
+          VS
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-xl font-black tracking-tight text-white">VS Planer</h1>
+            <span id="autoSaveBadge" class="text-[10px] bg-emerald-400/25 text-emerald-100 border border-emerald-300/70 px-2 py-0.5 rounded-full font-bold">● Auto-Saved</span>
+          </div>
+          <p class="text-[11px] text-purple-100 hidden sm:block">2D व 3D/4D मकान नक्शा • लाइव स्केच • कटा कोना • नेबर-वॉल नियम व PDF एक्सपोर्ट/इम्पोर्ट</p>
+        </div>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <button id="undoBtn" onclick="performUndo()" disabled class="candy-btn px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-xs font-bold flex items-center gap-1" title="Undo (Ctrl+Z)">
+          ↩️ <span class="hidden md:inline">Undo</span>
+        </button>
+        <button id="redoBtn" onclick="performRedo()" disabled class="candy-btn px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-xs font-bold flex items-center gap-1" title="Redo (Ctrl+Y)">
+          ↪️ <span class="hidden md:inline">Redo</span>
+        </button>
+
+        <button onclick="openSampleLibraryModal()" class="candy-btn px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-purple-950 font-extrabold text-xs shadow-md border border-white/60 flex items-center gap-1">
+          🏛️ <span>Sample (30'×50' 3BHK)</span>
+        </button>
+
+        <label class="candy-btn cursor-pointer px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-sky-500 text-slate-950 font-extrabold text-xs shadow-md border border-white/60 flex items-center gap-1">
+          📂 <span>PDF अपलोड</span>
+          <input type="file" id="pdfUploadInput" accept=".pdf,application/pdf" class="hidden" onchange="handlePdfFileUpload(event)" />
+        </label>
+
+        <button onclick="generateAndPrintPDF()" class="candy-btn px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 text-emerald-950 font-extrabold text-xs shadow-md border border-white/60 flex items-center gap-1">
+          📄 <span>PDF सेव करें</span>
+        </button>
+
+        <button onclick="downloadMapAsPNG()" class="candy-btn px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-pink-400 to-rose-500 text-white font-extrabold text-xs shadow-md border border-white/60 flex items-center gap-1" title="नक्शा फोटो (PNG) डाउनलोड करें">
+          🖼️ <span class="hidden sm:inline">PNG</span>
+        </button>
+
+        <button onclick="resetToDefaultProject()" class="candy-btn px-2.5 py-1.5 rounded-xl bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-bold border border-white/30" title="नया रीसेट करें">
+          🔄
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Panel Switcher -->
+    <div class="lg:hidden flex border-t border-white/20 bg-purple-900/40 px-2 py-1.5 gap-2">
+      <button id="mobTabForm" onclick="switchMobilePanel('form')" class="flex-1 py-1.5 rounded-xl text-xs font-extrabold bg-white text-purple-900 shadow">
+        📝 इंजीनियरिंग डेटा
+      </button>
+      <button id="mobTabCanvas" onclick="switchMobilePanel('canvas')" class="flex-1 py-1.5 rounded-xl text-xs font-extrabold text-white/90 hover:bg-white/10">
+        📐 2D / 3D नक्शा देखें
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-2.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- LEFT PANEL: Engineering & Architectural Form -->
+    <section id="leftFormPanel" class="lg:col-span-5 xl:col-span-5 flex flex-col gap-3 max-h-none lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto custom-scroll pr-0 lg:pr-1">
+
+      <!-- Live Metrics Ribbon -->
+      <div class="candy-card p-3.5 bg-gradient-to-r from-violet-50 via-pink-50 to-amber-50">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div class="flex items-center gap-2 flex-1 min-w-[180px]">
+            <span class="text-lg">👤</span>
+            <input type="text" id="clientNameInput" placeholder="क्लाइंट / मकान मालिक का नाम..." oninput="onFormChange()"
+              class="w-full px-3 py-1.5 rounded-xl border-2 border-purple-200 focus:border-purple-500 outline-none text-xs font-bold bg-white text-indigo-950" />
+          </div>
+          <!-- Unit Selector -->
+          <div class="flex items-center bg-purple-100 p-1 rounded-xl border border-purple-200">
+            <button type="button" id="unitBtnFtIn" onclick="switchInputUnit('ft_in')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-purple-600 text-white shadow">Ft + In</button>
+            <button type="button" id="unitBtnInch" onclick="switchInputUnit('inch')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold text-purple-800">Inches</button>
+            <button type="button" id="unitBtnCm" onclick="switchInputUnit('cm')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold text-purple-800">CM</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="bg-white rounded-xl p-2 border border-purple-100 shadow-sm">
+            <div class="text-[10px] font-bold text-purple-500 uppercase">कुल क्षेत्रफल</div>
+            <div id="metricSqFt" class="text-sm sm:text-base font-black text-purple-900">1200 Sq.Ft</div>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-emerald-100 shadow-sm">
+            <div class="text-[10px] font-bold text-emerald-600 uppercase">वर्ग गज</div>
+            <div id="metricGaj" class="text-sm sm:text-base font-black text-emerald-800">133.3 गज</div>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-amber-100 shadow-sm">
+            <div class="text-[10px] font-bold text-amber-600 uppercase">कुल वर्ग इंच</div>
+            <div id="metricSqIn" class="text-xs sm:text-sm font-black text-amber-800">172,800</div>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-sky-100 shadow-sm">
+            <div class="text-[10px] font-bold text-sky-600 uppercase">सीढ़ी स्टेप्स</div>
+            <div id="metricSteps" class="text-sm sm:text-base font-black text-sky-800">21 Steps</div>
+          </div>
+        </div>
+
+        <!-- Vastu Score & Structural Summary Strip -->
+        <div class="mt-2 grid grid-cols-2 gap-2 text-center">
+          <div class="bg-gradient-to-r from-amber-100 to-yellow-50 rounded-xl px-2.5 py-1.5 border border-amber-300 flex items-center justify-between">
+            <span class="text-[10px] font-extrabold text-amber-950">🧭 वास्तु स्कोर:</span>
+            <span id="vastuScoreBadge" class="text-xs font-black text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-amber-200">92 / 100</span>
+          </div>
+          <div class="bg-gradient-to-r from-indigo-100 to-sky-50 rounded-xl px-2.5 py-1.5 border border-indigo-200 flex items-center justify-between">
+            <span class="text-[10px] font-extrabold text-indigo-950">🏗️ प्लिंथ / कॉलम:</span>
+            <span id="structMiniBadge" class="text-[11px] font-black text-indigo-900">3 ft • 9"×12"</span>
+          </div>
+        </div>
+
+        <!-- Saved Projects Quick Bar -->
+        <div class="mt-2.5 pt-2.5 border-t border-purple-100 flex flex-wrap items-center gap-1.5">
+          <select id="savedProjectsSelect" class="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-xl border border-purple-200 bg-white text-xs font-semibold text-indigo-950 outline-none">
+            <option value="">-- सेव किए गए प्रोजेक्ट चुनें --</option>
+          </select>
+          <button type="button" onclick="saveNamedProject()" class="candy-btn px-2.5 py-1.5 rounded-xl bg-violet-600 text-white text-xs font-bold">💾 सेव</button>
+          <button type="button" onclick="loadNamedProject()" class="candy-btn px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold">📂 लोड</button>
+          <button type="button" onclick="deleteNamedProject()" class="candy-btn px-2 py-1.5 rounded-xl bg-rose-100 text-rose-700 text-xs font-bold">🗑️</button>
+        </div>
+      </div>
+
+      <!-- SECTION 1: 4 Locked Perimeter Walls & Direction -->
+      <div class="candy-card overflow-hidden">
+        <button type="button" onclick="toggleAccordion('sec1Body')" class="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white flex items-center justify-between font-extrabold text-xs sm:text-sm">
+          <span>🧱 1. चारों मुख्य दीवारें (Locked), दिशा व कटा कोना</span>
+          <span>▼</span>
+        </button>
+        <div id="sec1Body" class="p-3.5 space-y-3">
+          <!-- Direction -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">🧭 मुख्य द्वार की दिशा (Facing)</label>
+              <select id="facingSelect" onchange="toggleCustomSelect('facingSelect','facingCustom'); onFormChange();" class="w-full px-2.5 py-1.5 rounded-xl border border-purple-200 bg-purple-50/50 text-xs font-bold">
+                <option value="पूर्व मुखी (East Facing - शुभ)">पूर्व मुखी (East Facing - शुभ)</option>
+                <option value="उत्तर मुखी (North Facing - कुबेर)">उत्तर मुखी (North Facing - कुबेर)</option>
+                <option value="पश्चिम मुखी (West Facing)">पश्चिम मुखी (West Facing)</option>
+                <option value="दक्षिण मुखी (South Facing)">दक्षिण मुखी (South Facing)</option>
+                <option value="ईशान कोण (North-East Corner)">ईशान कोण (North-East Corner)</option>
+                <option value="custom">✍️ अन्य / खुद लिखें...</option>
+              </select>
+              <input type="text" id="facingCustom" placeholder="अपनी दिशा लिखें..." oninput="onFormChange()" class="hidden mt-1 w-full px-2.5 py-1 rounded-lg border border-purple-300 text-xs" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">📐 प्लॉट का कटा कोना (Corner Cut)</label>
+              <select id="cornerCutPos" onchange="onCornerCutChange()" class="w-full px-2.5 py-1.5 rounded-xl border border-purple-200 bg-purple-50/50 text-xs font-bold">
+                <option value="none">कोई कोना नहीं (सीधा 90° प्लॉट)</option>
+                <option value="rear-left">पीछे बाएँ कोना कटा (Rear-Left)</option>
+                <option value="rear-right">पीछे दाएँ कोना कटा (Rear-Right)</option>
+                <option value="front-left">आगे बाएँ कोना कटा (Front-Left)</option>
+                <option value="front-right">आगे दाएँ कोना कटा (Front-Right)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="cornerCutDimsRow" class="hidden grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+            <div>
+              <label class="block text-[10px] font-bold text-amber-900">कोना कट चौड़ाई (Ft)</label>
+              <input type="number" id="cornerCutW" value="5" min="1" max="30" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-amber-300 text-xs font-bold bg-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-amber-900">कोना कट गहराई (Ft)</label>
+              <input type="number" id="cornerCutD" value="5" min="1" max="30" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-amber-300 text-xs font-bold bg-white" />
+            </div>
+          </div>
+
+          <!-- 4 Locked Walls Container -->
+          <div class="bg-rose-50/70 border border-rose-200 rounded-xl p-2 text-[11px] text-rose-800 font-semibold">
+            🔒 चारों मुख्य बाहरी दीवारों के नाम लॉक हैं। यदि किसी दीवार पर <b>"बंद (पड़ोसी से सटी)"</b> चुना जाएगा, तो उस दीवार पर दरवाजा या खिड़की स्वतः प्रतिबंधित रहेगी।
+          </div>
+          <div id="fourWallsContainer" class="space-y-2"></div>
+
+          <!-- Structural Engineering Standards (Plinth, Column, Flooring) -->
+          <div class="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-2">
+            <div class="text-xs font-extrabold text-indigo-950">🏗️ स्ट्रक्चरल व फ़िनिशिंग मानक (इंजीनियर डेटा)</div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <div>
+                <label class="block text-[9.5px] font-bold text-indigo-900">कुर्सी ऊँचाई (Plinth)</label>
+                <select id="plinthHeightFt" onchange="onFormChange()" class="w-full px-1.5 py-1 rounded-lg border border-indigo-200 text-xs font-bold bg-white">
+                  <option value="2.5">2.5 Feet</option>
+                  <option value="3" selected>3 Feet (स्टैंडर्ड)</option>
+                  <option value="3.5">3.5 Feet</option>
+                  <option value="4">4 Feet (रोड से ऊँचा)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[9.5px] font-bold text-indigo-900">RCC कॉलम साइज</label>
+                <select id="columnSizeSpec" onchange="onFormChange()" class="w-full px-1.5 py-1 rounded-lg border border-indigo-200 text-xs font-bold bg-white">
+                  <option value='9"×12"' selected>9" × 12" (G / G+1)</option>
+                  <option value='12"×12"'>12" × 12" (G+1 / G+2)</option>
+                  <option value='12"×15"'>12" × 15" (Heavy Load)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[9.5px] font-bold text-indigo-900">फर्श (Flooring)</label>
+                <select id="flooringType" onchange="toggleCustomSelect('flooringType','flooringCustom'); onFormChange();" class="w-full px-1.5 py-1 rounded-lg border border-indigo-200 text-xs font-bold bg-white">
+                  <option value="विट्रिफाइड टाइल्स (2×4 ft)">विट्रिफाइड टाइल्स</option>
+                  <option value="इटालियन / मकराना मार्बल">मार्बल (Marble)</option>
+                  <option value="ग्रेनाइट व एंटी-स्किड">ग्रेनाइट + एंटी-स्किड</option>
+                  <option value="custom">✍️ खुद लिखें...</option>
+                </select>
+              </div>
+            </div>
+            <input type="text" id="flooringCustom" placeholder="फर्श का प्रकार लिखें..." oninput="onFormChange()" class="hidden w-full px-2 py-1 rounded-lg border border-indigo-300 text-xs bg-white" />
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: Bedrooms with Corner Cut, Door Size/Swing & Windows -->
+      <div class="candy-card overflow-hidden">
+        <div class="px-4 py-3 bg-gradient-to-r from-pink-600 to-rose-500 text-white flex items-center justify-between">
+          <button type="button" onclick="toggleAccordion('sec3Body')" class="font-extrabold text-xs sm:text-sm text-left flex-1">
+            🛏️ 3. बेडरूम, दरवाजा साइज/दिशा, खिड़की व कमरे का कोना
+          </button>
+          <button type="button" onclick="addBedroom()" class="candy-btn px-2.5 py-1 rounded-lg bg-white text-rose-700 font-extrabold text-xs shadow">
+            + कमरा जोड़ें
+          </button>
+        </div>
+        <div id="sec3Body" class="p-3.5 space-y-2.5">
+          <div id="bedroomsContainer" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <!-- SECTION 4: Kitchen, Hall, Lath-Bath (2 Options), Staircase & OTS -->
+      <div class="candy-card overflow-hidden">
+        <button type="button" onclick="toggleAccordion('sec4Body')" class="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-between font-extrabold text-xs sm:text-sm">
+          <span>🍳 4. किचन, हॉल, लैट-बाथ (2 विकल्प), सीढ़ियां व OTS</span>
+          <span>▼</span>
+        </button>
+        <div id="sec4Body" class="p-3.5 space-y-3">
+          <!-- Kitchen -->
+          <div class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2">
+            <div class="text-xs font-extrabold text-amber-950">🍳 किचन (Kitchen)</div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold">चौड़ाई (Ft)</label>
+                <input type="number" id="kitchenW" value="8" min="4" max="25" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-amber-300 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold">लंबाई (Ft)</label>
+                <input type="number" id="kitchenL" value="10" min="5" max="25" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-amber-300 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold">स्थान (Zone)</label>
+                <select id="kitchenLoc" onchange="toggleCustomSelect('kitchenLoc','kitchenCustomNote'); onFormChange();" class="w-full px-1.5 py-1 rounded-lg border border-amber-300 text-xs font-bold bg-white">
+                  <option value="आग्नेय कोण (Front-Right)">आग्नेय (Front-Right)</option>
+                  <option value="आगे बाएँ (Front-Left)">आगे बाएँ (Front-Left)</option>
+                  <option value="पीछे दाएँ (Rear-Right)">पीछे दाएँ (Rear-Right)</option>
+                  <option value="पीछे बाएँ (Rear-Left)">पीछे बाएँ (Rear-Left)</option>
+                  <option value="custom">✍️ खुद लिखें...</option>
+                </select>
+              </div>
+            </div>
+            <input type="text" id="kitchenCustomNote" placeholder="किचन के लिए कस्टम स्थान या नोट..." oninput="onFormChange()" class="hidden w-full px-2 py-1 rounded-lg border border-amber-300 text-xs bg-white" />
+          </div>
+
+          <!-- Hall / Living -->
+          <div class="p-2.5 rounded-xl bg-sky-50/70 border border-sky-200 space-y-2">
+            <div class="text-xs font-extrabold text-sky-950">🛋️ लिविंग हॉल / लॉबी (Living Hall)</div>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold">चौड़ाई (Ft)</label>
+                <input type="number" id="hallW" value="14" min="6" max="40" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-sky-300 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold">लंबाई (Ft)</label>
+                <input type="number" id="hallL" value="16" min="6" max="45" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-sky-300 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold">हॉल टाइप</label>
+                <select id="hallType" onchange="toggleCustomSelect('hallType','hallCustomNote'); onFormChange();" class="w-full px-1.5 py-1 rounded-lg border border-sky-300 text-xs font-bold bg-white">
+                  <option value="सेंट्रल लिविंग + डाइनिंग हॉल">सेंट्रल लिविंग हॉल</option>
+                  <option value="फ्रंट गेस्ट ड्राइंग हॉल">फ्रंट ड्राइंग हॉल</option>
+                  <option value="custom">✍️ खुद लिखें...</option>
+                </select>
+              </div>
+            </div>
+            <input type="text" id="hallCustomNote" placeholder="हॉल का कस्टम विवरण..." oninput="onFormChange()" class="hidden w-full px-2 py-1 rounded-lg border border-sky-300 text-xs bg-white" />
+          </div>
+
+          <!-- Lath-Bath 2 Options -->
+          <div class="p-2.5 rounded-xl bg-cyan-50/70 border border-cyan-200 space-y-2">
+            <div class="text-xs font-extrabold text-cyan-950">🚿 लैट-बाथ व्यवस्था (2 विकल्प: सीढ़ियों के नीचे + अलग जगह)</div>
+            <label class="flex items-center gap-2 text-xs font-bold text-cyan-900 cursor-pointer">
+              <input type="checkbox" id="bathUnderStairs" checked onchange="onFormChange()" class="w-4 h-4 accent-cyan-600" />
+              <span>1) सीढ़ियों के नीचे लैट-बाथ (Under-Stair Toilet)</span>
+            </label>
+            <div class="pt-1 border-t border-cyan-200">
+              <label class="flex items-center gap-2 text-xs font-bold text-cyan-900 cursor-pointer mb-1.5">
+                <input type="checkbox" id="bathSeparate" checked onchange="onFormChange()" class="w-4 h-4 accent-cyan-600" />
+                <span>2) अलग जगह लैट-बाथ (Separate Combined Bath+WC)</span>
+              </label>
+              <div class="grid grid-cols-3 gap-2">
+                <div>
+                  <label class="block text-[10px] font-bold">चौड़ाई (Ft)</label>
+                  <input type="number" id="sepBathW" value="5" min="3" max="15" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-cyan-300 text-xs font-bold bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold">लंबाई (Ft)</label>
+                  <input type="number" id="sepBathL" value="7" min="4" max="18" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-cyan-300 text-xs font-bold bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold">कहाँ बनाना है?</label>
+                  <select id="sepBathLoc" onchange="toggleCustomSelect('sepBathLoc','bathCustom'); onFormChange();" class="w-full px-1.5 py-1 rounded-lg border border-cyan-300 text-xs font-bold bg-white">
+                    <option value="पीछे बाएँ (Rear-Left)">पीछे बाएँ (Rear-Left)</option>
+                    <option value="पीछे दाएँ (Rear-Right)">पीछे दाएँ (Rear-Right)</option>
+                    <option value="मध्य बाएँ (Mid-Left)">मध्य बाएँ (Mid-Left)</option>
+                    <option value="मध्य दाएँ (Mid-Right)">मध्य दाएँ (Mid-Right)</option>
+                    <option value="custom">✍️ खुद लिखें...</option>
+                  </select>
+                </div>
+              </div>
+              <input type="text" id="bathCustom" placeholder="अलग लैट-बाथ की जगह या सीट टाइप लिखें..." oninput="onFormChange()" class="hidden mt-1 w-full px-2 py-1 rounded-lg border border-cyan-300 text-xs bg-white" />
+            </div>
+          </div>
+
+          <!-- Staircase & OTS -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div class="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-1.5">
+              <div class="text-xs font-extrabold text-indigo-950">🪜 सीढ़ियां (Staircase)</div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label class="block text-[10px] font-bold">चौड़ाई (Ft)</label>
+                  <input type="number" id="stairW" value="3.5" min="2.5" max="6" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-indigo-300 text-xs font-bold bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold">राइजर (Inch)</label>
+                  <input type="number" id="stairRiserIn" value="7" min="5" max="9" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-indigo-300 text-xs font-bold bg-white" />
+                </div>
+              </div>
+              <select id="stairLoc" onchange="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-indigo-300 text-xs font-bold bg-white">
+                <option value="आगे बाएँ (Front-Left - बाहर/हॉल से)">आगे बाएँ (Front-Left)</option>
+                <option value="आगे दाएँ (Front-Right)">आगे दाएँ (Front-Right)</option>
+                <option value="हॉल के मध्य बाएँ (Mid-Left)">हॉल के मध्य बाएँ (Mid-Left)</option>
+                <option value="हॉल के मध्य दाएँ (Mid-Right)">हॉल के मध्य दाएँ (Mid-Right)</option>
+              </select>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-yellow-50/70 border border-yellow-200 space-y-1.5">
+              <div class="text-xs font-extrabold text-yellow-950">☀️ OTS वेंटिलेशन जाल</div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label class="block text-[10px] font-bold">चौड़ाई (Ft)</label>
+                  <input type="number" id="otsW" value="4" min="0" max="15" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-yellow-300 text-xs font-bold bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold">लंबाई (Ft)</label>
+                  <input type="number" id="otsL" value="4" min="0" max="15" step="0.5" oninput="onFormChange()" class="w-full px-2 py-1 rounded-lg border border-yellow-300 text-xs font-bold bg-white" />
+                </div>
+              </div>
+              <select id="otsLoc" onchange="toggleCustomSelect('otsLoc','otsCustomNote'); onFormChange();" class="w-full px-2 py-1 rounded-lg border border-yellow-300 text-xs font-bold bg-white">
+                <option value="पीछे बाथरूम व किचन के बीच">पीछे बाथरूम व किचन के बीच</option>
+                <option value="मध्य हॉल छत पर">मध्य हॉल छत पर</option>
+                <option value="पीछे दोनों बेडरूम के बीच">पीछे दोनों बेडरूम के बीच</option>
+                <option value="custom">✍️ खुद लिखें...</option>
+              </select>
+              <input type="text" id="otsCustomNote" placeholder="OTS लोकेशन लिखें..." oninput="onFormChange()" class="hidden w-full px-2 py-1 rounded-lg border border-yellow-300 text-xs bg-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 5: Quick-Tick Facilities & Custom Notes -->
+      <div class="candy-card overflow-hidden">
+        <button type="button" onclick="toggleAccordion('sec5Body')" class="w-full px-4 py-3 bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white flex items-center justify-between font-extrabold text-xs sm:text-sm">
+          <span>✨ 5. अतिरिक्त सुविधाएं (पूजा घर, स्टोर, टंकी आदि) व कस्टम पॉइंट</span>
+          <span>▼</span>
+        </button>
+        <div id="sec5Body" class="p-3.5 space-y-3">
+          <div id="facilitiesGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+
+          <!-- Custom Points -->
+          <div class="pt-2 border-t border-purple-100">
+            <div class="text-xs font-extrabold text-purple-900 mb-1.5">📝 क्लाइंट की विशेष शर्त / कस्टम पॉइंट जोड़ें:</div>
+            <div class="flex gap-1.5">
+              <input type="text" id="newCustomPointInput" placeholder="जैसे: फ्रंट में झूला, सोलर पैनल, दो भाइयों हेतु बंटवारा..." class="flex-1 px-2.5 py-1.5 rounded-xl border border-purple-200 text-xs bg-white" />
+              <button type="button" onclick="addCustomPoint()" class="candy-btn px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold">+ जोड़ें</button>
+            </div>
+            <ul id="customPointsList" class="mt-2 space-y-1"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: Live 2D Blueprint, 2D Hand-Sketch & 3D/4D Interactive Studio -->
+    <section id="rightCanvasPanel" class="hidden lg:flex lg:col-span-7 xl:col-span-7 flex-col gap-3">
+      <div class="candy-card p-3 flex-1 flex flex-col">
+
+        <!-- View Mode Tabs + Zoom Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-purple-100">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" id="tabBlueprint" onclick="switchDrawStyle('blueprint')" class="candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow">
+              📐 2D Blueprint
+            </button>
+            <button type="button" id="tabSketch" onclick="switchDrawStyle('sketch')" class="candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-purple-100 text-purple-900">
+              ✏️ 2D Hand-Sketch
+            </button>
+            <button type="button" id="tab3DView" onclick="switchDrawStyle('3d')" class="candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-100 text-emerald-900">
+              🧊 3D / 4D नक्शा
+            </button>
+          </div>
+
+          <!-- Zoom & Layout Tools -->
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="adjustCanvasZoom(-0.15)" class="candy-btn px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 font-black text-xs" title="Zoom Out">➖</button>
+            <span id="zoomLevelBadge" class="text-[11px] font-extrabold text-purple-900 px-1.5">100%</span>
+            <button type="button" onclick="adjustCanvasZoom(0.15)" class="candy-btn px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 font-black text-xs" title="Zoom In">➕</button>
+            <button type="button" onclick="resetCanvasZoom()" class="candy-btn px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px]">100%</button>
+            <button type="button" onclick="resetManualLayout()" class="candy-btn px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px]">↺ रीसेट लेआउट</button>
+          </div>
+        </div>
+
+        <!-- Hand-Sketch Builder Palette (Shown in 2D Sketch Mode) -->
+        <div id="sketchBuilderToolbar" class="hidden mt-2 p-2 rounded-xl bg-gradient-to-r from-amber-50 via-pink-50 to-purple-50 border border-amber-200 flex flex-wrap items-center gap-1.5">
+          <span class="text-[11px] font-extrabold text-amber-900 mr-1">🛠️ स्केच में जोड़ें:</span>
+          <button type="button" onclick="addSketchItem('bedroom')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-purple-200 text-[11px] font-bold text-purple-900">+ 🛏️ बेडरूम</button>
+          <button type="button" onclick="addSketchItem('kitchen')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-bold text-amber-900">+ 🍳 किचन</button>
+          <button type="button" onclick="addSketchItem('bath')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-cyan-200 text-[11px] font-bold text-cyan-900">+ 🚿 लैट-बाथ</button>
+          <button type="button" onclick="addSketchItem('mandir')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-orange-200 text-[11px] font-bold text-orange-900">+ 🛕 पूजा घर</button>
+          <button type="button" onclick="addSketchItem('store')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-emerald-200 text-[11px] font-bold text-emerald-900">+ 📦 स्टोर</button>
+          <button type="button" onclick="addSketchItem('ots')" class="candy-btn px-2 py-1 rounded-lg bg-white border border-yellow-300 text-[11px] font-bold text-yellow-900">+ ☀️ OTS</button>
+        </div>
+
+        <!-- 3D / 4D Controls Bar (Shown in 3D Mode) -->
+        <div id="threeDControlsBar" class="hidden mt-2 p-2 rounded-xl bg-gradient-to-r from-emerald-50 via-sky-50 to-violet-50 border border-emerald-200 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" id="btn3DCutaway" onclick="set3DMode('cutaway')" class="candy-btn px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-extrabold">🏠 3D कटअवे व्यू</button>
+            <button type="button" id="btn4DWalkthrough" onclick="set3DMode('4d')" class="candy-btn px-2.5 py-1 rounded-lg bg-violet-600 text-white text-[11px] font-extrabold">🚶‍♂️ 4D बंद दीवारों के अंदर</button>
+            <button type="button" id="btn3DDayNight" onclick="toggle3DLighting()" class="candy-btn px-2.5 py-1 rounded-lg bg-amber-400 text-amber-950 text-[11px] font-extrabold">☀️ दिन / 🌙 रात</button>
+            <button type="button" id="btn3DAutoRotate" onclick="toggle3DAutoRotate()" class="candy-btn px-2.5 py-1 rounded-lg bg-white border border-sky-300 text-sky-900 text-[11px] font-bold">🔄 Auto-Rotate</button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-bold text-slate-600">कमरे में जाएं:</span>
+            <select id="walkthroughRoomSelect" onchange="jump4DToRoom(this.value)" class="px-2 py-1 rounded-lg border border-violet-200 bg-white text-[11px] font-bold text-indigo-950">
+              <option value="overview">पूरा घर (Overview)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Tip Banner -->
+        <div class="mt-2 px-3 py-1.5 rounded-xl bg-violet-50 border border-violet-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-violet-900 font-semibold">
+          <span>💡 <b>सिंगल-क्लिक:</b> नीचे Move बार खुलेगा व ड्रैग कर सकते हैं • <b>डबल-क्लिक:</b> लाइव फोटो व कोना-कट एडिट बॉक्स • <b>3D/4D:</b> केवल देखने के लिए</span>
+          <span id="neighborRuleBadge" class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-extrabold text-[10px]">🛡️ पड़ोसी बंद दीवार नियम सक्रिय</span>
+        </div>
+
+        <!-- Interactive 2D Canvas Wrapper -->
+        <div id="canvas2DWrapper" class="relative mt-2.5 flex-1 min-h-[430px] sm:min-h-[520px] rounded-2xl overflow-hidden border-2 border-purple-200 bg-white shadow-inner">
+          <canvas id="blueprintCanvas" class="w-full h-full block cursor-grab"></canvas>
+
+          <!-- Single-Click Bottom Movement Bar (Appears at bottom of screen/canvas on 1 click) -->
+          <div id="bottomMoveControlBar" class="hidden absolute bottom-3 left-1/2 -translate-x-1/2 z-30 animate-spring bg-white/95 backdrop-blur-md border-2 border-purple-400 shadow-2xl rounded-2xl px-3.5 py-2 flex flex-wrap items-center justify-center gap-2 max-w-[95%]">
+            <span id="bottomMoveObjLabel" class="text-xs font-black text-purple-950 bg-purple-100 px-2.5 py-1 rounded-xl">📐 चयनित ऑब्जेक्ट</span>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="nudgeSelectedObject(-1, 0)" class="candy-btn px-2.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 font-black text-xs shadow-sm">⬅️ बाएँ</button>
+              <button type="button" onclick="nudgeSelectedObject(0, 1)" class="candy-btn px-2.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 font-black text-xs shadow-sm">⬆️ ऊपर</button>
+              <button type="button" onclick="nudgeSelectedObject(0, -1)" class="candy-btn px-2.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 font-black text-xs shadow-sm">⬇️ नीचे</button>
+              <button type="button" onclick="nudgeSelectedObject(1, 0)" class="candy-btn px-2.5 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-950 font-black text-xs shadow-sm">➡️ दाएँ</button>
+            </div>
+            <button type="button" onclick="openSelectedInInspector()" class="candy-btn px-2.5 py-1.5 rounded-xl bg-amber-400 text-amber-950 font-extrabold text-xs shadow-sm">✏️ एडिट</button>
+            <button type="button" onclick="hideBottomMoveBar()" class="candy-btn px-2 py-1.5 rounded-xl bg-rose-100 text-rose-700 font-black text-xs">✕</button>
+          </div>
+        </div>
+
+        <!-- Interactive 3D / 4D Container (View-Only Visualization) -->
+        <div id="canvas3DWrapper" class="hidden relative mt-2.5 flex-1 min-h-[430px] sm:min-h-[520px] rounded-2xl overflow-hidden border-2 border-emerald-300 bg-sky-100 shadow-inner">
+          <div id="threeDMount" class="w-full h-full min-h-[430px] sm:min-h-[520px]"></div>
+          <div class="absolute bottom-3 left-3 bg-white/92 backdrop-blur px-3 py-1.5 rounded-xl border border-amber-300 text-[11px] font-bold text-amber-950 shadow">
+            👁️ View-Only 3D/4D मॉडल • माउस/उंगली से 360° घुमाकर देखें (बदलाव केवल 2D नक्शे या इंजीनियर डेटा से करें)
+          </div>
+        </div>
+
+        <!-- Engineering & Vastu Validation Strip -->
+        <div id="engineeringChecklistBar" class="mt-2.5 p-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 text-[11px] text-emerald-950 flex flex-wrap gap-2 items-center justify-between">
+        </div>
+
+        <!-- Auto Material, Electrical & Plumbing BOQ Summary Strip -->
+        <div id="autoBoqEstimateBar" class="mt-2 p-2.5 rounded-xl bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 border border-amber-200 text-[11px] text-amber-950 flex flex-wrap gap-2 items-center justify-between">
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- DOUBLE-CLICK OBJECT INSPECTOR DIALOG BOX (Click Outside Saves & Closes) -->
+  <div id="objectInspectorBackdrop" onclick="handleInspectorBackdropClick(event)" class="hidden fixed inset-0 z-[90] bg-purple-950/45 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div id="objectInspectorModal" onclick="event.stopPropagation()" class="animate-spring w-full max-w-lg rounded-3xl bg-white border-4 border-purple-300 shadow-2xl overflow-hidden">
+      <!-- Dialog Header -->
+      <div class="px-5 py-3.5 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📐</span>
+          <div>
+            <h3 id="inspDialogTitle" class="font-black text-sm sm:text-base">ऑब्जेक्ट डिटेल व एडिट</h3>
+            <p id="inspDialogSubtitle" class="text-[11px] text-purple-100">साइज, दिशा, कोना व लॉक सेटिंग्स</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="inspLockToggleBtn" onclick="toggleSelectedObjectLock()" class="candy-btn px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-extrabold border border-white/40">
+            🔓 Unlocked
+          </button>
+          <button type="button" onclick="saveAndCloseObjectInspector()" class="candy-btn w-8 h-8 rounded-full bg-white/20 hover:bg-rose-500 text-white font-black text-sm flex items-center justify-center">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Dialog Body -->
+      <div class="p-4 sm:p-5 space-y-3.5 max-h-[80vh] overflow-y-auto custom-scroll">
+        <!-- Live Dynamic SVG Preview Image -->
+        <div class="rounded-2xl bg-gradient-to-br from-violet-50 via-sky-50 to-emerald-50 border-2 border-purple-200 p-3 flex flex-col items-center">
+          <div id="inspSvgPreviewBox" class="w-full h-36 flex items-center justify-center"></div>
+          <div id="inspLiveSummaryBadge" class="mt-1 text-[11px] font-extrabold text-purple-900 bg-white px-3 py-0.5 rounded-full border border-purple-200 shadow-sm"></div>
+        </div>
+
+        <!-- Lock Warning Banner -->
+        <div id="inspLockedNotice" class="hidden p-2.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-950 text-xs font-bold text-center">
+          🔒 यह ऑब्जेक्ट लॉक है! बदलाव करने के लिए ऊपर <b>Unlock</b> बटन दबाएं।
+        </div>
+
+        <!-- Editable Controls Container -->
+        <div id="inspEditableFields" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">🏷️ नाम / लेबल</label>
+              <input type="text" id="inspNameInput" oninput="applyInspectorLiveEdit()" class="w-full px-3 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold text-indigo-950" />
+            </div>
+            <div id="inspRoomCornerGroup">
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">📐 किस साइड की दीवार का कोना काटना है?</label>
+              <select id="inspCornerSelect" onchange="applyInspectorLiveEdit()" class="w-full px-2.5 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold bg-white">
+                <option value="none">सीधा 90° (कोई कट नहीं)</option>
+                <option value="rear-left">पीछे-बाएँ दीवार का कोना (Rear-Left)</option>
+                <option value="rear-right">पीछे-दाएँ दीवार का कोना (Rear-Right)</option>
+                <option value="front-left">आगे-बाएँ दीवार का कोना (Front-Left)</option>
+                <option value="front-right">आगे-दाएँ दीवार का कोना (Front-Right)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Corner Cut Dimensions & Remaining Net Sq.Ft Display -->
+          <div id="inspCornerCutDimsBox" class="hidden p-2.5 rounded-2xl bg-amber-50 border-2 border-amber-300 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-extrabold text-amber-950">✂️ कोना कितना फीट काटना है?</span>
+              <span id="inspRemainingSqFtBadge" class="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-600 text-white">शेष एरिया: 0 Sq.Ft</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900">दीवार चौड़ाई कट (Ft)</label>
+                <input type="number" id="inspCornerCutWInput" step="0.5" min="1" max="20" value="3" oninput="applyInspectorLiveEdit()" class="w-full px-2.5 py-1 rounded-xl border border-amber-400 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-amber-900">दीवार गहराई कट (Ft)</label>
+                <input type="number" id="inspCornerCutDInput" step="0.5" min="1" max="20" value="3" oninput="applyInspectorLiveEdit()" class="w-full px-2.5 py-1 rounded-xl border border-amber-400 text-xs font-bold bg-white" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Width & Length -->
+          <div id="inspDimsRow" class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label id="inspWLabel" class="block text-[11px] font-extrabold text-purple-900 mb-1">चौड़ाई (Width Ft)</label>
+              <input type="number" id="inspWInput" step="0.5" min="1" max="80" oninput="applyInspectorLiveEdit()" class="w-full px-3 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold" />
+            </div>
+            <div>
+              <label id="inspLLabel" class="block text-[11px] font-extrabold text-purple-900 mb-1">लंबाई (Length Ft)</label>
+              <input type="number" id="inspLInput" step="0.5" min="1" max="80" oninput="applyInspectorLiveEdit()" class="w-full px-3 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold" />
+            </div>
+          </div>
+
+          <!-- Door & Window Specific Settings -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">🚪 दरवाजा साइज व खुलने की दिशा</label>
+              <div class="flex gap-1.5">
+                <input type="text" id="inspDoorSizeInput" placeholder="3.5'x7'" oninput="applyInspectorLiveEdit()" class="w-20 px-2 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold" />
+                <select id="inspDoorSwingSelect" onchange="applyInspectorLiveEdit()" class="flex-1 px-2 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold bg-white">
+                  <option value="bottom-left">नीचे-बाएँ खुलेगा</option>
+                  <option value="bottom-right">नीचे-दाएँ खुलेगा</option>
+                  <option value="top-left">ऊपर-बाएँ खुलेगा</option>
+                  <option value="top-right">ऊपर-दाएँ खुलेगा</option>
+                  <option value="left-in">बाएँ अंदर खुलेगा</option>
+                  <option value="right-in">दाएँ अंदर खुलेगा</option>
+                  <option value="none">कोई दरवाजा नहीं</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-extrabold text-purple-900 mb-1">🪟 खिड़की चौड़ाई (Ft) व दीवार</label>
+              <div class="flex gap-1.5">
+                <input type="number" id="inspWinWInput" step="0.5" min="0" max="15" oninput="applyInspectorLiveEdit()" class="w-20 px-2 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold" />
+                <select id="inspWinWallSelect" onchange="applyInspectorLiveEdit()" class="flex-1 px-2 py-1.5 rounded-xl border-2 border-purple-200 text-xs font-bold bg-white">
+                  <option value="auto">Auto (खुली दीवार)</option>
+                  <option value="bottom">आगे की दीवार (Front)</option>
+                  <option value="top">पीछे की दीवार (Rear)</option>
+                  <option value="left">बाएँ दीवार (Left)</option>
+                  <option value="right">दाएँ दीवार (Right)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dialog Footer Actions -->
+        <div class="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-purple-100">
+          <button type="button" id="inspDeleteBtn" onclick="deleteObjectFromInspector()" class="candy-btn px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-extrabold">
+            🗑️ ऑब्जेक्ट हटाएं
+          </button>
+          <button type="button" onclick="saveAndCloseObjectInspector()" class="candy-btn px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-extrabold shadow-md">
+            ✅ सेव व बंद करें
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7-PRESET SAMPLE REFERENCE MODAL (Does NOT overwrite user data until copied) -->
+  <div id="sampleLibraryBackdrop" onclick="if(event.target===this) closeSampleLibraryModal()" class="hidden fixed inset-0 z-[95] bg-indigo-950/55 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-5">
+    <div onclick="event.stopPropagation()" class="animate-spring w-full max-w-5xl rounded-3xl bg-white border-4 border-amber-300 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div class="px-5 py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white flex items-center justify-between">
+        <div>
+          <h2 class="font-black text-base sm:text-lg">🏛️ VS Planer • ⭐ 30' × 50' (3BHK All-in-One) इंजीनियरिंग सैंपल</h2>
+          <p class="text-[11px] text-amber-50">आपका भरा हुआ प्रोजेक्ट सुरक्षित है — यहाँ से संपूर्ण 3BHK मास्टर नक्शा देखें या अपने प्रोजेक्ट में कॉपी करें</p>
+        </div>
+        <button type="button" onclick="closeSampleLibraryModal()" class="candy-btn w-9 h-9 rounded-full bg-white/25 hover:bg-rose-600 text-white font-black text-base flex items-center justify-center">✕</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto custom-scroll space-y-4">
+        <!-- Preset Tabs -->
+        <div id="samplePresetTabs" class="flex flex-wrap gap-2"></div>
+
+        <!-- Active Preset Details & Preview -->
+        <div id="samplePresetDetailCard" class="grid grid-cols-1 md:grid-cols-12 gap-4 bg-gradient-to-br from-amber-50/60 via-purple-50/50 to-emerald-50/60 p-4 rounded-2xl border-2 border-amber-200">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'vs_planer_auto_state_v1';
+    const SAVED_PROJECTS_KEY = 'vs_planer_saved_list_v1';
+
+    const FACILITY_CATALOG = [
+      { id: 'mandir', label: '🛕 पूजा घर / मंदिर (Pooja Mandir)', defaultW: 5, defaultL: 6, defaultLoc: 'आगे दाएँ (Front-Right - ईशान)' },
+      { id: 'dining', label: '🍽️ डाइनिंग एरिया (Dining Space)', defaultW: 8, defaultL: 10, defaultLoc: 'मध्य दाएँ (Mid-Right)' },
+      { id: 'handwash', label: '🚰 हैंड वॉश सिंक एरिया (Hand Wash)', defaultW: 3, defaultL: 4, defaultLoc: 'मध्य बाएँ (Mid-Left)' },
+      { id: 'store', label: '📦 स्टोर रूम (Store Room)', defaultW: 5, defaultL: 6, defaultLoc: 'पीछे बाएँ (Rear-Left)' },
+      { id: 'utility', label: '🧺 यूटिलिटी / वॉश एरिया (Wash Area)', defaultW: 4, defaultL: 6, defaultLoc: 'पीछे दाएँ (Rear-Right)' },
+      { id: 'septic', label: '🕳️ सेप्टिक टैंक (Septic Tank)', defaultW: 5, defaultL: 7, defaultLoc: 'आगे बाएँ (Front-Left)' },
+      { id: 'ugtank', label: '💧 अंडरग्राउंड पानी टंकी (UG Tank)', defaultW: 6, defaultL: 8, defaultLoc: 'आगे दाएँ (Front-Right)' },
+      { id: 'borewell', label: '⛲ बोरवेल / समर्सिबल (Borewell)', defaultW: 3, defaultL: 3, defaultLoc: 'आगे दाएँ (Front-Right)' }
+    ];
+
+    function createSampleState() {
+      return {
+        clientName: '',
+        inputUnit: 'ft_in',
+        facingSelect: 'पूर्व मुखी (East Facing - शुभ)',
+        facingCustom: '',
+        cornerCutPos: 'none',
+        cornerCutW: 5,
+        cornerCutD: 5,
+        walls: [
+          { id: 'front', title: 'आगे की दीवार (Front)', lengthFt: 30, thicknessIn: 9, heightFt: 12, status: 'खुली (Front Road Side)' },
+          { id: 'rear', title: 'पीछे की दीवार (Rear)', lengthFt: 30, thicknessIn: 9, heightFt: 12, status: 'बंद (पड़ोसी से सटी - बिना खिड़की)' },
+          { id: 'left', title: 'बाएँ की दीवार (Left)', lengthFt: 40, thicknessIn: 9, heightFt: 12, status: 'बंद (पड़ोसी से सटी - बिना खिड़की)' },
+          { id: 'right', title: 'दाएँ की दीवार (Right)', lengthFt: 40, thicknessIn: 9, heightFt: 12, status: 'बंद (पड़ोसी से सटी - बिना खिड़की)' }
+        ],
+        frontSetbackFt: 5,
+        chhajjaFt: 3.5,
+        ceilingHeightFt: 12,
+        plinthHeightFt: '3',
+        columnSizeSpec: '9"×12"',
+        flooringType: 'विट्रिफाइड टाइल्स (2×4 ft)',
+        flooringCustom: '',
+        mainGateW: 9,
+        mainGateH: 7,
+        parkingType: 'कार + बाइक पोर्च पार्किंग',
+        parkingCustom: '',
+        hasFirstFloor: false,
+        firstFloorMode: 'same',
+        firstFloorCustomNote: '',
+        bedrooms: [
+          { id: 'b1', name: 'मास्टर बेडरूम 1', w: 12, l: 13, zone: 'पीछे बाएँ (Rear-Left)', doorSize: "3.5'×7'", doorSwing: 'bottom-right', winCount: 1, winW: 5, winWall: 'auto', cornerCut: 'none', cornerCutW: 3, cornerCutD: 3, note: 'अटैच वॉर्डरोब' },
+          { id: 'b2', name: 'बेडरूम 2', w: 12, l: 13, zone: 'पीछे दाएँ (Rear-Right)', doorSize: "3.5'×7'", doorSwing: 'bottom-left', winCount: 1, winW: 5, winWall: 'auto', cornerCut: 'none', cornerCutW: 3, cornerCutD: 3, note: '' }
+        ],
+        kitchenW: 8,
+        kitchenL: 10,
+        kitchenLoc: 'आग्नेय कोण (Front-Right)',
+        kitchenCustomNote: '',
+        hallW: 14,
+        hallL: 15,
+        hallType: 'सेंट्रल लिविंग + डाइनिंग हॉल',
+        hallCustomNote: '',
+        bathUnderStairs: true,
+        bathSeparate: true,
+        sepBathW: 5,
+        sepBathL: 7,
+        sepBathLoc: 'मध्य बाएँ (Mid-Left)',
+        bathCustom: '',
+        stairW: 3.5,
+        stairRiserIn: 7,
+        stairLoc: 'आगे बाएँ (Front-Left - बाहर/हॉल से)',
+        otsW: 4,
+        otsL: 4,
+        otsLoc: 'पीछे बाथरूम व किचन के बीच',
+        otsCustomNote: '',
+        facilities: ['mandir'],
+        facilityDetails: {
+          mandir: { w: 5, l: 6, loc: 'आगे दाएँ (Front-Right - ईशान)', doorSwing: 'bottom-left' }
+        },
+        customPoints: [],
+        sketchExtraItems: [],
+        manualBoxes: {},
+        lockedIds: {}
+      };
+    }
+
+    function loadInitialState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return Object.assign(createSampleState(), JSON.parse(raw));
+      } catch (e) {}
+      return createSampleState();
+    }
+
+    let state = loadInitialState();
+    let undoStack = [];
+    let redoStack = [];
+    let currentDrawStyle = 'blueprint';
+    let canvasZoom = 1.0;
+    let selectedObjectId = null;
+    let inspectorObjectId = null;
+
+    let threeScene = null, threeCamera = null, threeRenderer = null, threeHouseGroup = null;
+    let threeMode = 'cutaway';
+    let threeIsNight = false;
+    let threeAutoRotate = false;
+    let threeAnimId = null;
+    let threeOrbit = { theta: 0.65, phi: 0.85, radius: 68 };
+    let threeRoomMeshes = [];
+
+    function showToast(msg, type = 'info') {
+      const box = document.getElementById('toastBox');
+      if (!box) return;
+      const el = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-600 text-white border-emerald-300',
+        warn: 'bg-amber-500 text-amber-950 border-amber-200',
+        info: 'bg-violet-700 text-white border-purple-300'
+      };
+      el.className = `animate-spring px-4 py-2.5 rounded-2xl border-2 shadow-xl text-xs font-extrabold ${colors[type] || colors.info}`;
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3200);
+    }
+
+    function toggleAccordion(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    function switchMobilePanel(panel) {
+      const formP = document.getElementById('leftFormPanel');
+      const canvP = document.getElementById('rightCanvasPanel');
+      const tabF = document.getElementById('mobTabForm');
+      const tabC = document.getElementById('mobTabCanvas');
+      if (!formP || !canvP) return;
+      if (panel === 'form') {
+        formP.classList.remove('hidden');
+        canvP.classList.add('hidden');
+        canvP.classList.remove('flex');
+        if (tabF) tabF.className = 'flex-1 py-1.5 rounded-xl text-xs font-extrabold bg-white text-purple-900 shadow';
+        if (tabC) tabC.className = 'flex-1 py-1.5 rounded-xl text-xs font-extrabold text-white/90 hover:bg-white/10';
+      } else {
+        formP.classList.add('hidden');
+        canvP.classList.remove('hidden');
+        canvP.classList.add('flex');
+        if (tabC) tabC.className = 'flex-1 py-1.5 rounded-xl text-xs font-extrabold bg-white text-purple-900 shadow';
+        if (tabF) tabF.className = 'flex-1 py-1.5 rounded-xl text-xs font-extrabold text-white/90 hover:bg-white/10';
+        setTimeout(() => draw2DBlueprint(), 30);
+      }
+    }
+
+    function toggleCustomSelect(selectId, inputId) {
+      const sel = document.getElementById(selectId);
+      const inp = document.getElementById(inputId);
+      if (!sel || !inp) return;
+      if (sel.value === 'custom') inp.classList.remove('hidden');
+      else inp.classList.add('hidden');
+    }
+
+    function getResolvedLabel(selectVal, customVal) {
+      if (selectVal === 'custom' && customVal && customVal.trim()) return customVal.trim();
+      return selectVal === 'custom' ? 'कस्टम' : selectVal;
+    }
+
+    function recordUndoSnapshot() {
+      undoStack.push(JSON.stringify(state));
+      if (undoStack.length > 35) undoStack.shift();
+      redoStack = [];
+      updateUndoRedoButtons();
+    }
+
+    function performUndo() {
+      if (undoStack.length === 0) return;
+      redoStack.push(JSON.stringify(state));
+      const prev = undoStack.pop();
+      state = Object.assign(createSampleState(), JSON.parse(prev));
+      syncUIFromState();
+      updateAllOutputs(true);
+      updateUndoRedoButtons();
+      showToast('↩️ पिछला बदलाव वापस (Undo) किया गया', 'info');
+    }
+
+    function performRedo() {
+      if (redoStack.length === 0) return;
+      undoStack.push(JSON.stringify(state));
+      const next = redoStack.pop();
+      state = Object.assign(createSampleState(), JSON.parse(next));
+      syncUIFromState();
+      updateAllOutputs(true);
+      updateUndoRedoButtons();
+      showToast('↪️ बदलाव पुनः लागू (Redo) किया गया', 'info');
+    }
+
+    function updateUndoRedoButtons() {
+      const u = document.getElementById('undoBtn');
+      const r = document.getElementById('redoBtn');
+      if (u) u.disabled = undoStack.length === 0;
+      if (r) r.disabled = redoStack.length === 0;
+    }
+
+    function isObjectLocked(id) {
+      return Boolean(state.lockedIds && state.lockedIds[id]);
+    }
+
+    function switchInputUnit(unit) {
+      state.inputUnit = unit;
+      ['ft_in', 'inch', 'cm'].forEach(u => {
+        const btn = document.getElementById(u === 'ft_in' ? 'unitBtnFtIn' : u === 'inch' ? 'unitBtnInch' : 'unitBtnCm');
+        if (btn) {
+          btn.className = u === unit
+            ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-purple-600 text-white shadow'
+            : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold text-purple-800';
+        }
+      });
+      renderFourWallsUI();
+    }
+
+    function formatWallLengthFromFt(ft) {
+      const f = Math.floor(ft);
+      const inc = Math.round((ft - f) * 12);
+      if (state.inputUnit === 'inch') return `${Math.round(ft * 12)} in`;
+      if (state.inputUnit === 'cm') return `${Math.round(ft * 30.48)} cm`;
+      return inc > 0 ? `${f}' ${inc}"` : `${f}'`;
+    }
+
+    function renderFourWallsUI() {
+      const box = document.getElementById('fourWallsContainer');
+      if (!box) return;
+      box.innerHTML = state.walls.map((w, idx) => {
+        const f = Math.floor(w.lengthFt);
+        const inc = Math.round((w.lengthFt - f) * 12);
+        const totalIn = Math.round(w.lengthFt * 12);
+        const totalCm = Math.round(w.lengthFt * 30.48);
+
+        let lenInputs = '';
+        if (state.inputUnit === 'ft_in') {
+          lenInputs = `
+            <div class="flex gap-1">
+              <input type="number" value="${f}" min="5" max="200" oninput="onWallLenUnitChange(${idx}, 'ft', this.value)" class="w-14 px-1.5 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" title="Feet" />
+              <input type="number" value="${inc}" min="0" max="11" oninput="onWallLenUnitChange(${idx}, 'in', this.value)" class="w-12 px-1.5 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" title="Inch" />
+            </div>`;
+        } else if (state.inputUnit === 'inch') {
+          lenInputs = `<input type="number" value="${totalIn}" min="60" max="2400" oninput="onWallLenUnitChange(${idx}, 'totalIn', this.value)" class="w-24 px-2 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" />`;
+        } else {
+          lenInputs = `<input type="number" value="${totalCm}" min="150" max="6000" oninput="onWallLenUnitChange(${idx}, 'cm', this.value)" class="w-24 px-2 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" />`;
+        }
+
+        return `
+          <div class="p-2.5 rounded-xl bg-white border border-purple-200 shadow-sm space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black text-indigo-950">🔒 ${w.title}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">${formatWallLengthFromFt(w.lengthFt)} (${w.lengthFt.toFixed(1)} ft)</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500">लंबाई (${state.inputUnit === 'ft_in' ? 'Ft / In' : state.inputUnit})</label>
+                ${lenInputs}
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500">मोटाई (Inch)</label>
+                <input type="number" value="${w.thicknessIn}" min="4" max="24" step="0.5" oninput="onWallFieldChange(${idx}, 'thicknessIn', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" />
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-500">ऊँचाई (Feet)</label>
+                <input type="number" value="${w.heightFt}" min="6" max="30" step="0.5" oninput="onWallFieldChange(${idx}, 'heightFt', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-purple-200 text-xs font-bold bg-white" />
+              </div>
+            </div>
+            <div>
+              <select onchange="onWallFieldChange(${idx}, 'status', this.value)" class="w-full px-2 py-1 rounded-lg border border-purple-200 text-[11px] font-bold bg-purple-50/40">
+                <option value="खुली (Front Road Side)" ${w.status.includes('Road') ? 'selected' : ''}>खुली (Front Road Side)</option>
+                <option value="बंद (पड़ोसी से सटी - बिना खिड़की)" ${w.status.includes('बंद') ? 'selected' : ''}>बंद (पड़ोसी से सटी - बिना खिड़की)</option>
+                <option value="खुली (गली / ओपन साइड)" ${w.status.includes('गली') ? 'selected' : ''}>खुली (गली / ओपन साइड)</option>
+              </select>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function onWallLenUnitChange(idx, part, rawVal) {
+      recordUndoSnapshot();
+      const val = Math.max(0, Number(rawVal) || 0);
+      const cur = state.walls[idx].lengthFt;
+      if (part === 'ft') {
+        const inc = Math.round((cur - Math.floor(cur)) * 12);
+        state.walls[idx].lengthFt = Math.max(5, val + inc / 12);
+      } else if (part === 'in') {
+        state.walls[idx].lengthFt = Math.max(5, Math.floor(cur) + Math.min(11, val) / 12);
+      } else if (part === 'totalIn') {
+        state.walls[idx].lengthFt = Math.max(5, val / 12);
+      } else if (part === 'cm') {
+        state.walls[idx].lengthFt = Math.max(5, val / 30.48);
+      }
+      renderFourWallsUI();
+      updateAllOutputs(true);
+    }
+
+    function onWallFieldChange(idx, field, val) {
+      recordUndoSnapshot();
+      state.walls[idx][field] = val;
+      enforceAllNeighborWallRules();
+      updateAllOutputs(true);
+    }
+
+    function onCornerCutChange() {
+      recordUndoSnapshot();
+      const sel = document.getElementById('cornerCutPos');
+      const row = document.getElementById('cornerCutDimsRow');
+      state.cornerCutPos = sel ? sel.value : 'none';
+      if (row) {
+        if (state.cornerCutPos === 'none') row.classList.add('hidden');
+        else row.classList.remove('hidden');
+      }
+      updateAllOutputs(true);
+    }
+
+    function computeRoomNetSqFt(room) {
+      const gross = (Number(room.w) || 0) * (Number(room.l) || 0);
+      if (!room.cornerCut || room.cornerCut === 'none') return gross;
+      const cw = Math.min(Number(room.w) || 0, Number(room.cornerCutW) || 3);
+      const cd = Math.min(Number(room.l) || 0, Number(room.cornerCutD) || 3);
+      return Math.max(0, gross - 0.5 * cw * cd);
+    }
+
+    function renderBedroomsUI() {
+      const box = document.getElementById('bedroomsContainer');
+      if (!box) return;
+      box.innerHTML = state.bedrooms.map((b, i) => `
+        <div class="p-3 rounded-2xl bg-rose-50/60 border border-rose-200 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <input type="text" value="${b.name}" oninput="updateBedroomField(${i}, 'name', this.value)" class="font-extrabold text-xs text-rose-950 bg-white px-2.5 py-1 rounded-lg border border-rose-200 flex-1" />
+            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white">${computeRoomNetSqFt(b).toFixed(1)} Sq.Ft</span>
+            ${state.bedrooms.length > 1 ? `<button type="button" onclick="removeBedroom(${i})" class="text-xs px-2 py-0.5 rounded-lg bg-rose-200 text-rose-900 font-bold">✕</button>` : ''}
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <div>
+              <label class="block text-[9px] font-bold">चौड़ाई (Ft)</label>
+              <input type="number" value="${b.w}" min="6" max="40" step="0.5" oninput="updateBedroomField(${i}, 'w', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white" />
+            </div>
+            <div>
+              <label class="block text-[9px] font-bold">लंबाई (Ft)</label>
+              <input type="number" value="${b.l}" min="6" max="40" step="0.5" oninput="updateBedroomField(${i}, 'l', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white" />
+            </div>
+            <div>
+              <label class="block text-[9px] font-bold">स्थान (Zone)</label>
+              <select onchange="updateBedroomField(${i}, 'zone', this.value)" class="w-full px-1.5 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white">
+                <option value="पीछे बाएँ (Rear-Left)" ${b.zone.includes('Rear-Left') ? 'selected' : ''}>पीछे बाएँ</option>
+                <option value="पीछे दाएँ (Rear-Right)" ${b.zone.includes('Rear-Right') ? 'selected' : ''}>पीछे दाएँ</option>
+                <option value="आगे बाएँ (Front-Left)" ${b.zone.includes('Front-Left') ? 'selected' : ''}>आगे बाएँ</option>
+                <option value="आगे दाएँ (Front-Right)" ${b.zone.includes('Front-Right') ? 'selected' : ''}>आगे दाएँ</option>
+                <option value="मध्य बाएँ (Mid-Left)" ${b.zone.includes('Mid-Left') ? 'selected' : ''}>मध्य बाएँ</option>
+                <option value="मध्य दाएँ (Mid-Right)" ${b.zone.includes('Mid-Right') ? 'selected' : ''}>मध्य दाएँ</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <div>
+              <label class="block text-[9px] font-bold">गेट साइज</label>
+              <input type="text" value="${b.doorSize}" oninput="updateBedroomField(${i}, 'doorSize', this.value)" class="w-full px-2 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white" />
+            </div>
+            <div>
+              <label class="block text-[9px] font-bold">खिड़की संख्या</label>
+              <input type="number" value="${b.winCount}" min="0" max="4" oninput="updateBedroomField(${i}, 'winCount', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white" />
+            </div>
+            <div>
+              <label class="block text-[9px] font-bold">खिड़की चौड़ाई (Ft)</label>
+              <input type="number" value="${b.winW}" min="0" max="12" step="0.5" oninput="updateBedroomField(${i}, 'winW', Number(this.value))" class="w-full px-2 py-1 rounded-lg border border-rose-200 text-xs font-bold bg-white" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <select onchange="updateBedroomField(${i}, 'cornerCut', this.value)" class="px-2 py-1 rounded-lg border border-rose-200 text-[11px] font-bold bg-white">
+              <option value="none" ${b.cornerCut === 'none' ? 'selected' : ''}>कोना: सीधा 90°</option>
+              <option value="rear-left" ${b.cornerCut === 'rear-left' ? 'selected' : ''}>कोना कटा: पीछे-बाएँ</option>
+              <option value="rear-right" ${b.cornerCut === 'rear-right' ? 'selected' : ''}>कोना कटा: पीछे-दाएँ</option>
+              <option value="front-left" ${b.cornerCut === 'front-left' ? 'selected' : ''}>कोना कटा: आगे-बाएँ</option>
+              <option value="front-right" ${b.cornerCut === 'front-right' ? 'selected' : ''}>कोना कटा: आगे-दाएँ</option>
+            </select>
+            <input type="text" value="${b.note || ''}" placeholder="नोट (जैसे: बड़ी खिड़की)..." oninput="updateBedroomNote(${i}, this.value)" class="px-2 py-1 rounded-lg border border-rose-200 text-[11px] bg-white" />
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateBedroomField(idx, field, val) {
+      recordUndoSnapshot();
+      state.bedrooms[idx][field] = val;
+      if (field === 'cornerCut') renderBedroomsUI();
+      updateAllOutputs(true);
+    }
+
+    function updateBedroomNote(idx, val) {
+      state.bedrooms[idx].note = val;
+      if (/badi|बड़ी|large|big/i.test(val)) {
+        state.bedrooms[idx].winW = Math.max(6.5, state.bedrooms[idx].winW || 5);
+        state.bedrooms[idx].winCount = Math.max(1, state.bedrooms[idx].winCount || 1);
+      }
+      updateAllOutputs(true);
+    }
+
+    function addBedroom() {
+      recordUndoSnapshot();
+      const n = state.bedrooms.length + 1;
+      state.bedrooms.push({
+        id: 'b_' + Date.now(),
+        name: `बेडरूम ${n}`,
+        w: 11,
+        l: 12,
+        zone: n % 2 === 1 ? 'आगे बाएँ (Front-Left)' : 'आगे दाएँ (Front-Right)',
+        doorSize: "3.5'×7'",
+        doorSwing: 'bottom-left',
+        winCount: 1,
+        winW: 5,
+        winWall: 'auto',
+        cornerCut: 'none',
+        cornerCutW: 3,
+        cornerCutD: 3,
+        note: ''
+      });
+      renderBedroomsUI();
+      updateAllOutputs(true);
+      showToast(`🛏️ बेडरूम ${n} जोड़ा गया!`, 'success');
+    }
+
+    function removeBedroom(idx) {
+      recordUndoSnapshot();
+      state.bedrooms.splice(idx, 1);
+      renderBedroomsUI();
+      updateAllOutputs(true);
+    }
+
+    function renderFacilitiesUI() {
+      const box = document.getElementById('facilitiesGrid');
+      if (!box) return;
+      box.innerHTML = FACILITY_CATALOG.map(f => {
+        const checked = state.facilities.includes(f.id);
+        const det = state.facilityDetails[f.id] || { w: f.defaultW, l: f.defaultL, loc: f.defaultLoc };
+        return `
+          <div class="p-2.5 rounded-xl border ${checked ? 'bg-purple-50 border-purple-400' : 'bg-white border-purple-100'} space-y-1.5">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-extrabold text-indigo-950">
+              <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleFacility('${f.id}')" class="w-4 h-4 accent-purple-600" />
+              <span>${f.label}</span>
+            </label>
+            ${checked ? `
+              <div class="grid grid-cols-3 gap-1 pt-1">
+                <input type="number" value="${det.w}" min="2" max="25" step="0.5" oninput="updateFacilityDetail('${f.id}','w',Number(this.value))" class="px-1.5 py-0.5 rounded border border-purple-200 text-[11px] font-bold bg-white" title="Width Ft" />
+                <input type="number" value="${det.l}" min="2" max="25" step="0.5" oninput="updateFacilityDetail('${f.id}','l',Number(this.value))" class="px-1.5 py-0.5 rounded border border-purple-200 text-[11px] font-bold bg-white" title="Length Ft" />
+                <select onchange="updateFacilityDetail('${f.id}','loc',this.value)" class="px-1 py-0.5 rounded border border-purple-200 text-[10px] font-bold bg-white">
+                  <option value="आगे दाएँ (Front-Right - ईशान)" ${det.loc.includes('Front-Right') ? 'selected' : ''}>आगे दाएँ</option>
+                  <option value="आगे बाएँ (Front-Left)" ${det.loc.includes('Front-Left') ? 'selected' : ''}>आगे बाएँ</option>
+                  <option value="मध्य दाएँ (Mid-Right)" ${det.loc.includes('Mid-Right') ? 'selected' : ''}>मध्य दाएँ</option>
+                  <option value="मध्य बाएँ (Mid-Left)" ${det.loc.includes('Mid-Left') ? 'selected' : ''}>मध्य बाएँ</option>
+                  <option value="पीछे दाएँ (Rear-Right)" ${det.loc.includes('Rear-Right') ? 'selected' : ''}>पीछे दाएँ</option>
+                  <option value="पीछे बाएँ (Rear-Left)" ${det.loc.includes('Rear-Left') ? 'selected' : ''}>पीछे बाएँ</option>
+                </select>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleFacility(fid) {
+      recordUndoSnapshot();
+      const idx = state.facilities.indexOf(fid);
+      if (idx >= 0) {
+        state.facilities.splice(idx, 1);
+      } else {
+        state.facilities.push(fid);
+        const cat = FACILITY_CATALOG.find(f => f.id === fid);
+        if (cat && !state.facilityDetails[fid]) {
+          state.facilityDetails[fid] = { w: cat.defaultW, l: cat.defaultL, loc: cat.defaultLoc, doorSwing: 'bottom-left' };
+        }
+      }
+      renderFacilitiesUI();
+      updateAllOutputs(true);
+    }
+
+    function updateFacilityDetail(fid, key, val) {
+      if (!state.facilityDetails[fid]) state.facilityDetails[fid] = { w: 5, l: 5, loc: 'आगे दाएँ (Front-Right)' };
+      state.facilityDetails[fid][key] = val;
+      updateAllOutputs(true);
+    }
+
+    function renderCustomPointsUI() {
+      const ul = document.getElementById('customPointsList');
+      if (!ul) return;
+      ul.innerHTML = (state.customPoints || []).map((pt, i) => `
+        <li class="flex items-center justify-between px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-xs font-semibold text-purple-950">
+          <span>✅ ${pt}</span>
+          <button type="button" onclick="removeCustomPoint(${i})" class="text-rose-600 font-black text-xs ml-2">✕</button>
+        </li>
+      `).join('');
+    }
+
+    function addCustomPoint() {
+      const inp = document.getElementById('newCustomPointInput');
+      if (!inp || !inp.value.trim()) return;
+      recordUndoSnapshot();
+      state.customPoints.push(inp.value.trim());
+      inp.value = '';
+      renderCustomPointsUI();
+      updateAllOutputs(true);
+    }
+
+    function removeCustomPoint(idx) {
+      recordUndoSnapshot();
+      state.customPoints.splice(idx, 1);
+      renderCustomPointsUI();
+      updateAllOutputs(true);
+    }
+
+    function enforceAllNeighborWallRules() {
+      const rearClosed = state.walls[1]?.status.includes('बंद');
+      const leftClosed = state.walls[2]?.status.includes('बंद');
+      const rightClosed = state.walls[3]?.status.includes('बंद');
+      state.bedrooms.forEach(b => {
+        if (b.winWall === 'top' && rearClosed) b.winWall = 'auto';
+        if (b.winWall === 'left' && leftClosed) b.winWall = 'auto';
+        if (b.winWall === 'right' && rightClosed) b.winWall = 'auto';
+      });
+    }
+
+    function calculatePlotMetrics() {
+      const wFront = Math.max(10, Number(state.walls[0]?.lengthFt) || 30);
+      const wRear = Math.max(10, Number(state.walls[1]?.lengthFt) || 30);
+      const dLeft = Math.max(10, Number(state.walls[2]?.lengthFt) || 40);
+      const dRight = Math.max(10, Number(state.walls[3]?.lengthFt) || 40);
+
+      let grossSqFt = ((wFront + wRear) / 2) * ((dLeft + dRight) / 2);
+      if (state.cornerCutPos && state.cornerCutPos !== 'none') {
+        grossSqFt = Math.max(50, grossSqFt - 0.5 * (Number(state.cornerCutW) || 0) * (Number(state.cornerCutD) || 0));
+      }
+      const sqGaj = grossSqFt / 9;
+      const sqInches = Math.round(grossSqFt * 144);
+      const ceilIn = (Number(state.ceilingHeightFt) || 12) * 12;
+      const riserIn = Math.max(5, Number(state.stairRiserIn) || 7);
+      const stairSteps = Math.max(12, Math.round(ceilIn / riserIn));
+
+      return { wFront, wRear, dLeft, dRight, grossSqFt, sqGaj, sqInches, stairSteps };
+    }
+
+    function syncUIFromState() {
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+      setVal('clientNameInput', state.clientName || '');
+      setVal('facingSelect', state.facingSelect);
+      setVal('facingCustom', state.facingCustom);
+      toggleCustomSelect('facingSelect', 'facingCustom');
+
+      setVal('cornerCutPos', state.cornerCutPos);
+      setVal('cornerCutW', state.cornerCutW);
+      setVal('cornerCutD', state.cornerCutD);
+      const ccRow = document.getElementById('cornerCutDimsRow');
+      if (ccRow) ccRow.classList.toggle('hidden', state.cornerCutPos === 'none');
+
+      setVal('frontSetbackFt', state.frontSetbackFt);
+      setVal('chhajjaFt', state.chhajjaFt);
+      setVal('ceilingHeightFt', state.ceilingHeightFt);
+      setVal('plinthHeightFt', state.plinthHeightFt || '3');
+      setVal('columnSizeSpec', state.columnSizeSpec || '9"×12"');
+      setVal('flooringType', state.flooringType || 'विट्रिफाइड टाइल्स (2×4 ft)');
+      setVal('flooringCustom', state.flooringCustom || '');
+      toggleCustomSelect('flooringType', 'flooringCustom');
+      setVal('mainGateW', state.mainGateW);
+      setVal('mainGateH', state.mainGateH);
+      setVal('parkingType', state.parkingType);
+      setVal('parkingCustom', state.parkingCustom);
+      toggleCustomSelect('parkingType', 'parkingCustom');
+
+      const ffChk = document.getElementById('hasFirstFloor');
+      const ffBox = document.getElementById('firstFloorOptionsBox');
+      if (ffChk) ffChk.checked = Boolean(state.hasFirstFloor);
+      if (ffBox) ffBox.classList.toggle('hidden', !state.hasFirstFloor);
+      document.querySelectorAll('input[name="firstFloorMode"]').forEach(r => { r.checked = r.value === state.firstFloorMode; });
+      setVal('firstFloorCustomNote', state.firstFloorCustomNote);
+
+      setVal('kitchenW', state.kitchenW);
+      setVal('kitchenL', state.kitchenL);
+      setVal('kitchenLoc', state.kitchenLoc);
+      setVal('kitchenCustomNote', state.kitchenCustomNote);
+      toggleCustomSelect('kitchenLoc', 'kitchenCustomNote');
+
+      setVal('hallW', state.hallW);
+      setVal('hallL', state.hallL);
+      setVal('hallType', state.hallType);
+      setVal('hallCustomNote', state.hallCustomNote);
+      toggleCustomSelect('hallType', 'hallCustomNote');
+
+      const bStair = document.getElementById('bathUnderStairs');
+      const bSep = document.getElementById('bathSeparate');
+      if (bStair) bStair.checked = Boolean(state.bathUnderStairs);
+      if (bSep) bSep.checked = Boolean(state.bathSeparate);
+      setVal('sepBathW', state.sepBathW);
+      setVal('sepBathL', state.sepBathL);
+      setVal('sepBathLoc', state.sepBathLoc);
+      setVal('bathCustom', state.bathCustom);
+      toggleCustomSelect('sepBathLoc', 'bathCustom');
+
+      setVal('stairW', state.stairW);
+      setVal('stairRiserIn', state.stairRiserIn);
+      setVal('stairLoc', state.stairLoc);
+      setVal('otsW', state.otsW);
+      setVal('otsL', state.otsL);
+      setVal('otsLoc', state.otsLoc);
+      setVal('otsCustomNote', state.otsCustomNote);
+      toggleCustomSelect('otsLoc', 'otsCustomNote');
+
+      renderFourWallsUI();
+      renderBedroomsUI();
+      renderFacilitiesUI();
+      renderCustomPointsUI();
+    }
+
+    function onFormChange() {
+      const getVal = id => document.getElementById(id)?.value;
+      state.clientName = getVal('clientNameInput') || '';
+      state.facingSelect = getVal('facingSelect') || state.facingSelect;
+      state.facingCustom = getVal('facingCustom') || '';
+      state.cornerCutW = Number(getVal('cornerCutW')) || 5;
+      state.cornerCutD = Number(getVal('cornerCutD')) || 5;
+
+      state.frontSetbackFt = Math.max(0, Number(getVal('frontSetbackFt')) || 0);
+      state.chhajjaFt = Math.max(0, Number(getVal('chhajjaFt')) || 0);
+      state.ceilingHeightFt = Number(getVal('ceilingHeightFt')) || 12;
+      state.plinthHeightFt = getVal('plinthHeightFt') || '3';
+      state.columnSizeSpec = getVal('columnSizeSpec') || '9"×12"';
+      state.flooringType = getVal('flooringType') || 'विट्रिफाइड टाइल्स (2×4 ft)';
+      state.flooringCustom = getVal('flooringCustom') || '';
+      state.mainGateW = Number(getVal('mainGateW')) || 9;
+      state.mainGateH = Number(getVal('mainGateH')) || 7;
+      state.parkingType = getVal('parkingType') || state.parkingType;
+      state.parkingCustom = getVal('parkingCustom') || '';
+
+      const ffChk = document.getElementById('hasFirstFloor');
+      const ffBox = document.getElementById('firstFloorOptionsBox');
+      state.hasFirstFloor = ffChk ? ffChk.checked : false;
+      if (ffBox) ffBox.classList.toggle('hidden', !state.hasFirstFloor);
+      const checkedMode = document.querySelector('input[name="firstFloorMode"]:checked');
+      if (checkedMode) state.firstFloorMode = checkedMode.value;
+      state.firstFloorCustomNote = getVal('firstFloorCustomNote') || '';
+
+      state.kitchenW = Math.max(4, Number(getVal('kitchenW')) || 8);
+      state.kitchenL = Math.max(4, Number(getVal('kitchenL')) || 10);
+      state.kitchenLoc = getVal('kitchenLoc') || state.kitchenLoc;
+      state.kitchenCustomNote = getVal('kitchenCustomNote') || '';
+
+      state.hallW = Math.max(6, Number(getVal('hallW')) || 14);
+      state.hallL = Math.max(6, Number(getVal('hallL')) || 15);
+      state.hallType = getVal('hallType') || state.hallType;
+      state.hallCustomNote = getVal('hallCustomNote') || '';
+
+      state.bathUnderStairs = Boolean(document.getElementById('bathUnderStairs')?.checked);
+      state.bathSeparate = Boolean(document.getElementById('bathSeparate')?.checked);
+      state.sepBathW = Math.max(3, Number(getVal('sepBathW')) || 5);
+      state.sepBathL = Math.max(4, Number(getVal('sepBathL')) || 7);
+      state.sepBathLoc = getVal('sepBathLoc') || state.sepBathLoc;
+      state.bathCustom = getVal('bathCustom') || '';
+
+      state.stairW = Math.max(2.5, Number(getVal('stairW')) || 3.5);
+      state.stairRiserIn = Math.max(5, Number(getVal('stairRiserIn')) || 7);
+      state.stairLoc = getVal('stairLoc') || state.stairLoc;
+
+      state.otsW = Math.max(0, Number(getVal('otsW')) || 0);
+      state.otsL = Math.max(0, Number(getVal('otsL')) || 0);
+      state.otsLoc = getVal('otsLoc') || state.otsLoc;
+      state.otsCustomNote = getVal('otsCustomNote') || '';
+
+      updateAllOutputs(true);
+    }
+
+    function updateAllOutputs(autoSave = true) {
+      const m = calculatePlotMetrics();
+      const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+      setTxt('metricSqFt', `${m.grossSqFt.toFixed(0)} Sq.Ft`);
+      setTxt('metricGaj', `${m.sqGaj.toFixed(1)} गज`);
+      setTxt('metricSqIn', m.sqInches.toLocaleString('en-IN'));
+      setTxt('metricSteps', `${m.stairSteps} Steps`);
+      setTxt('structMiniBadge', `${state.plinthHeightFt || 3} ft • ${state.columnSizeSpec || '9"×12"'}`);
+
+      const vastu = calculateVastuScore();
+      const vBadge = document.getElementById('vastuScoreBadge');
+      if (vBadge) {
+        vBadge.textContent = `${vastu.score} / 100`;
+        vBadge.className = vastu.score >= 80
+          ? 'text-xs font-black text-emerald-700 bg-white px-2 py-0.5 rounded-lg border border-emerald-300'
+          : 'text-xs font-black text-amber-700 bg-white px-2 py-0.5 rounded-lg border border-amber-300';
+      }
+
+      updateEngineeringChecklist(m);
+      updateAutoBoqEstimate(m);
+      draw2DBlueprint();
+      if (currentDrawStyle === '3d') renderMain3DHouse();
+
+      if (autoSave) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          const badge = document.getElementById('autoSaveBadge');
+          if (badge) badge.textContent = '● Auto-Saved';
+        } catch (e) {}
+      }
+    }
+
+    function calculateVastuScore() {
+      let score = 70;
+      const notes = [];
+      const facing = (state.facingSelect || '').toLowerCase();
+      if (facing.includes('पूर्व') || facing.includes('उत्तर') || facing.includes('ईशान')) {
+        score += 12;
+        notes.push('शुभ दिशा द्वार (+12)');
+      }
+      if ((state.kitchenLoc || '').includes('आग्नेय') || (state.kitchenLoc || '').includes('Front-Right')) {
+        score += 8;
+        notes.push('आग्नेय किचन (+8)');
+      }
+      if ((state.facilities || []).includes('mandir')) {
+        score += 5;
+        notes.push('ईशान पूजा स्थान (+5)');
+      }
+      if ((Number(state.otsW) || 0) > 0) {
+        score += 5;
+        notes.push('ब्रह्मस्थान/OTS प्रकाश (+5)');
+      }
+      return { score: Math.min(100, score), notes };
+    }
+
+    function calculateBoqEstimate(m) {
+      const floors = state.hasFirstFloor ? 2 : 1;
+      const builtSqFt = Math.max(200, (m.grossSqFt - m.wFront * (Number(state.frontSetbackFt) || 0)) * floors);
+      const bricks = Math.round(builtSqFt * 16);
+      const cementBags = Math.round(builtSqFt * 0.42);
+      const steelKg = Math.round(builtSqFt * 3.8);
+      const elecPoints = (state.bedrooms.length * 6) + 14;
+      const plumbPoints = (state.bathSeparate ? 7 : 0) + (state.bathUnderStairs ? 4 : 0) + 4;
+      return { floors, builtSqFt, bricks, cementBags, steelKg, elecPoints, plumbPoints };
+    }
+
+    function updateAutoBoqEstimate(m) {
+      const bar = document.getElementById('autoBoqEstimateBar');
+      if (!bar) return;
+      const b = calculateBoqEstimate(m);
+      bar.innerHTML = `
+        <span>🧱 <b>अनुमानित ईंटें:</b> ~${b.bricks.toLocaleString('en-IN')}</span>
+        <span>🏗️ <b>सीमेंट:</b> ~${b.cementBags} बैग</span>
+        <span>🔩 <b>सरिया (TMT):</b> ~${(b.steelKg / 1000).toFixed(2)} टन</span>
+        <span>⚡ <b>इलेक्ट्रिक/प्लंबिंग:</b> ${b.elecPoints} स्विच पॉइंट • ${b.plumbPoints} नल पॉइंट</span>
+      `;
+    }
+
+    function updateEngineeringChecklist(m) {
+      const bar = document.getElementById('engineeringChecklistBar');
+      if (!bar) return;
+      const closedCount = state.walls.filter(w => w.status.includes('बंद')).length;
+      bar.innerHTML = `
+        <span>✅ <b>RCC कॉलम मानक:</b> ${state.columnSizeSpec || '9"×12"'} (${state.hasFirstFloor ? 'G+1' : 'Ground'})</span>
+        <span>🧱 <b>बाहरी दीवार:</b> ${state.walls[0].thicknessIn}" | <b>प्लिंथ:</b> ${state.plinthHeightFt || 3} ft | <b>छत:</b> ${state.ceilingHeightFt} ft</span>
+        <span>🛡️ <b>बंद पड़ोसी दीवारें:</b> ${closedCount} तरफ (खिड़की प्रतिबंधित)</span>
+        <span>☀️ <b>वेंटिलेशन:</b> ${state.otsW > 0 ? `OTS ${state.otsW}'×${state.otsL}' सक्रिय` : 'OTS अनुशंसित'}</span>
+      `;
+    }
+
+    // =========================================================================
+    // 5. LAYOUT ENGINE & 2D BLUEPRINT / HAND-SKETCH RENDERING
+    // =========================================================================
+    function zoneToCoords(zoneStr, W, D, rw, rl, setback) {
+      const usableD = Math.max(10, D - setback);
+      const z = (zoneStr || '').toLowerCase();
+      let x = 0, y = setback;
+      if (z.includes('rear-right') || z.includes('पीछे दाएँ')) {
+        x = Math.max(0, W - rw);
+        y = Math.max(setback, D - rl);
+      } else if (z.includes('rear-left') || z.includes('पीछे बाएँ')) {
+        x = 0;
+        y = Math.max(setback, D - rl);
+      } else if (z.includes('front-right') || z.includes('आगे दाएँ') || z.includes('आग्नेय')) {
+        x = Math.max(0, W - rw);
+        y = setback;
+      } else if (z.includes('front-left') || z.includes('आगे बाएँ')) {
+        x = 0;
+        y = setback;
+      } else if (z.includes('mid-right') || z.includes('मध्य दाएँ')) {
+        x = Math.max(0, W - rw);
+        y = setback + Math.max(0, (usableD - rl) / 2);
+      } else if (z.includes('mid-left') || z.includes('मध्य बाएँ')) {
+        x = 0;
+        y = setback + Math.max(0, (usableD - rl) / 2);
+      } else {
+        x = Math.max(0, (W - rw) / 2);
+        y = setback + Math.max(0, (usableD - rl) / 2);
+      }
+      return { x, y };
+    }
+
+    function computeLayoutRooms() {
+      const m = calculatePlotMetrics();
+      const W = m.wFront;
+      const D = Math.max(m.dLeft, m.dRight);
+      const sb = Math.min(D * 0.45, Number(state.frontSetbackFt) || 0);
+      const list = [];
+
+      const applyManual = (id, defObj) => {
+        const mb = state.manualBoxes && state.manualBoxes[id];
+        if (mb) {
+          defObj.x = Math.max(0, Math.min(W - defObj.w, mb.x));
+          defObj.y = Math.max(0, Math.min(D - defObj.l, mb.y));
+          if (mb.w) defObj.w = Math.min(W, mb.w);
+          if (mb.l) defObj.l = Math.min(D, mb.l);
+        }
+        return defObj;
+      };
+
+      // Bedrooms
+      state.bedrooms.forEach(b => {
+        const rw = Math.min(W, Number(b.w) || 11);
+        const rl = Math.min(D - sb, Number(b.l) || 12);
+        const pos = zoneToCoords(b.zone, W, D, rw, rl, sb);
+        list.push(applyManual(b.id, {
+          id: b.id,
+          kind: 'bedroom',
+          name: b.name,
+          x: pos.x,
+          y: pos.y,
+          w: rw,
+          l: rl,
+          doorSize: b.doorSize || "3.5'×7'",
+          doorSwing: b.doorSwing || 'bottom-right',
+          winCount: b.winCount ?? 1,
+          winW: b.winW ?? 5,
+          winWall: b.winWall || 'auto',
+          cornerCut: b.cornerCut || 'none',
+          cornerCutW: b.cornerCutW || 3,
+          cornerCutD: b.cornerCutD || 3,
+          fill: '#f3e8ff',
+          stroke: '#7e22ce'
+        }));
+      });
+
+      // Kitchen
+      const kw = Math.min(W * 0.6, Number(state.kitchenW) || 8);
+      const kl = Math.min(D * 0.5, Number(state.kitchenL) || 10);
+      const kPos = zoneToCoords(state.kitchenLoc, W, D, kw, kl, sb);
+      list.push(applyManual('kitchen', {
+        id: 'kitchen',
+        kind: 'kitchen',
+        name: 'किचन (Kitchen)',
+        x: kPos.x,
+        y: kPos.y,
+        w: kw,
+        l: kl,
+        doorSize: "3'×7'",
+        doorSwing: 'bottom-left',
+        winCount: 1,
+        winW: 4,
+        winWall: 'auto',
+        fill: '#fef3c7',
+        stroke: '#d97706'
+      }));
+
+      // Hall
+      const hw = Math.min(W * 0.85, Number(state.hallW) || 14);
+      const hl = Math.min(D * 0.6, Number(state.hallL) || 15);
+      list.push(applyManual('hall', {
+        id: 'hall',
+        kind: 'hall',
+        name: 'लिविंग हॉल',
+        x: Math.max(0, (W - hw) / 2),
+        y: sb + Math.max(0, (D - sb - hl) / 2),
+        w: hw,
+        l: hl,
+        doorSize: "4'×7'",
+        doorSwing: 'bottom-right',
+        winCount: 1,
+        winW: 5,
+        winWall: 'auto',
+        fill: '#e0f2fe',
+        stroke: '#0284c7'
+      }));
+
+      // Separate Bath+WC
+      if (state.bathSeparate) {
+        const bw = Math.min(W * 0.45, Number(state.sepBathW) || 5);
+        const bl = Math.min(D * 0.45, Number(state.sepBathL) || 7);
+        const bPos = zoneToCoords(state.sepBathLoc, W, D, bw, bl, sb);
+        list.push(applyManual('bath_sep', {
+          id: 'bath_sep',
+          kind: 'bath',
+          name: 'लैट-बाथ (Bath+WC)',
+          x: bPos.x,
+          y: bPos.y,
+          w: bw,
+          l: bl,
+          doorSize: "2.5'×7'",
+          doorSwing: 'bottom-left',
+          winCount: 1,
+          winW: 2,
+          winWall: 'auto',
+          fill: '#cffafe',
+          stroke: '#0891b2'
+        }));
+      }
+
+      // Staircase
+      const sw = Math.min(W * 0.45, (Number(state.stairW) || 3.5) * 2);
+      const sl = Math.min(D * 0.45, 11);
+      const sPos = zoneToCoords(state.stairLoc, W, D, sw, sl, sb);
+      list.push(applyManual('staircase', {
+        id: 'staircase',
+        kind: 'stair',
+        name: state.bathUnderStairs ? 'सीढ़ियां + नीचे बाथ' : 'सीढ़ियां (Stairs)',
+        x: sPos.x,
+        y: sPos.y,
+        w: sw,
+        l: sl,
+        doorSize: '',
+        doorSwing: 'none',
+        winCount: 0,
+        winW: 0,
+        fill: '#e0e7ff',
+        stroke: '#4338ca'
+      }));
+
+      // OTS
+      if ((Number(state.otsW) || 0) > 0 && (Number(state.otsL) || 0) > 0) {
+        const ow = Math.min(W * 0.4, Number(state.otsW));
+        const ol = Math.min(D * 0.4, Number(state.otsL));
+        list.push(applyManual('ots', {
+          id: 'ots',
+          kind: 'ots',
+          name: '☀️ OTS जाल',
+          x: Math.max(0, (W - ow) / 2),
+          y: Math.max(sb, D - ol - 2),
+          w: ow,
+          l: ol,
+          doorSize: '',
+          doorSwing: 'none',
+          winCount: 0,
+          winW: 0,
+          fill: '#fef9c3',
+          stroke: '#ca8a04'
+        }));
+      }
+
+      // Selected Facilities
+      (state.facilities || []).forEach(fid => {
+        const cat = FACILITY_CATALOG.find(f => f.id === fid);
+        const det = state.facilityDetails[fid] || { w: 5, l: 5, loc: 'आगे दाएँ (Front-Right)' };
+        const fw = Math.min(W * 0.5, Number(det.w) || 5);
+        const fl = Math.min(D * 0.5, Number(det.l) || 5);
+        const fPos = zoneToCoords(det.loc, W, D, fw, fl, 0);
+        list.push(applyManual('fac_' + fid, {
+          id: 'fac_' + fid,
+          kind: fid === 'mandir' ? 'mandir' : 'facility',
+          name: cat ? cat.label.replace(/^[^\s]+\s/, '').split('(')[0].trim() : fid,
+          x: fPos.x,
+          y: fPos.y,
+          w: fw,
+          l: fl,
+          doorSize: fid === 'mandir' || fid === 'store' ? "3'×7'" : '',
+          doorSwing: det.doorSwing || (fid === 'mandir' || fid === 'store' ? 'bottom-left' : 'none'),
+          winCount: 0,
+          winW: 0,
+          fill: fid === 'mandir' ? '#ffedd5' : '#dcfce7',
+          stroke: fid === 'mandir' ? '#ea580c' : '#16a34a'
+        }));
+      });
+
+      // Sketch Extra Items
+      (state.sketchExtraItems || []).forEach(ex => {
+        list.push(applyManual(ex.id, {
+          id: ex.id,
+          kind: ex.kind || 'bedroom',
+          name: ex.name,
+          x: ex.x,
+          y: ex.y,
+          w: ex.w,
+          l: ex.l,
+          doorSize: ex.doorSize || "3'×7'",
+          doorSwing: ex.doorSwing || 'bottom-left',
+          winCount: ex.winCount ?? 1,
+          winW: ex.winW ?? 4,
+          winWall: 'auto',
+          fill: '#fce7f3',
+          stroke: '#db2777'
+        }));
+      });
+
+      return list;
+    }
+
+    function getCanvasTransform() {
+      const canvas = document.getElementById('blueprintCanvas');
+      if (!canvas) return null;
+      const cssW = Math.max(320, canvas.clientWidth || 640);
+      const cssH = Math.max(420, canvas.clientHeight || 520);
+      const m = calculatePlotMetrics();
+      const W = m.wFront;
+      const D = Math.max(m.dLeft, m.dRight);
+      const pad = 48;
+      const baseScale = Math.min((cssW - pad * 2) / W, (cssH - pad * 2.2) / D);
+      const scale = Math.max(4, baseScale * canvasZoom);
+      const ox = (cssW - W * scale) / 2;
+      const oy = (cssH - D * scale) / 2;
+      return { canvas, cssW, cssH, W, D, scale, ox, oy };
+    }
+
+    function drawDoorSymbol(ctx, rx, ry, rw, rh, swing, sizeLabel, scale) {
+      if (!swing || swing === 'none') return;
+      const dPx = Math.max(10, Math.min(rw * 0.45, rh * 0.45, 3.2 * scale));
+      ctx.save();
+      ctx.strokeStyle = '#d97706';
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+      ctx.lineWidth = 2;
+
+      let hx = rx + 6, hy = ry + rh, startA = -Math.PI / 2, endA = 0, lx = hx, ly = hy - dPx;
+      if (swing === 'bottom-right') {
+        hx = rx + rw - 6; hy = ry + rh; startA = Math.PI; endA = Math.PI * 1.5; lx = hx; ly = hy - dPx;
+      } else if (swing === 'top-left') {
+        hx = rx + 6; hy = ry; startA = 0; endA = Math.PI / 2; lx = hx; ly = hy + dPx;
+      } else if (swing === 'top-right') {
+        hx = rx + rw - 6; hy = ry; startA = Math.PI / 2; endA = Math.PI; lx = hx; ly = hy + dPx;
+      } else if (swing === 'left-in') {
+        hx = rx; hy = ry + 6; startA = 0; endA = Math.PI / 2; lx = hx + dPx; ly = hy;
+      } else if (swing === 'right-in') {
+        hx = rx + rw; hy = ry + 6; startA = Math.PI / 2; endA = Math.PI; lx = hx - dPx; ly = hy;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.arc(hx, hy, Math.max(4, Math.abs(dPx)), startA, endA);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(lx, ly);
+      ctx.stroke();
+
+      if (sizeLabel) {
+        ctx.fillStyle = '#92400e';
+        ctx.font = 'bold 8.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`🚪${sizeLabel}`, hx, hy + (swing.startsWith('top') ? 10 : -3));
+      }
+      ctx.restore();
+    }
+
+    function draw2DBlueprint() {
+      const tr = getCanvasTransform();
+      if (!tr) return;
+      const { canvas, cssW, cssH, W, D, scale, ox, oy } = tr;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const isSketch = currentDrawStyle === 'sketch';
+      ctx.fillStyle = isSketch ? '#fffbeb' : '#f8fafc';
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      // Subtle Engineering Grid
+      ctx.strokeStyle = isSketch ? 'rgba(217, 119, 6, 0.12)' : 'rgba(139, 92, 246, 0.10)';
+      ctx.lineWidth = 1;
+      const step = Math.max(10, scale * 2);
+      for (let gx = ox % step; gx < cssW; gx += step) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, cssH); ctx.stroke();
+      }
+      for (let gy = oy % step; gy < cssH; gy += step) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(cssW, gy); ctx.stroke();
+      }
+
+      const pw = W * scale;
+      const pd = D * scale;
+
+      // Plot Boundary Polygon (Supports Corner Cut)
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = isSketch ? 3.5 : 4.5;
+
+      const cc = state.cornerCutPos;
+      const cwPx = Math.min(pw * 0.45, (Number(state.cornerCutW) || 0) * scale);
+      const cdPx = Math.min(pd * 0.45, (Number(state.cornerCutD) || 0) * scale);
+
+      ctx.beginPath();
+      if (cc === 'rear-left') {
+        ctx.moveTo(ox + cwPx, oy); ctx.lineTo(ox + pw, oy); ctx.lineTo(ox + pw, oy + pd); ctx.lineTo(ox, oy + pd); ctx.lineTo(ox, oy + cdPx);
+      } else if (cc === 'rear-right') {
+        ctx.moveTo(ox, oy); ctx.lineTo(ox + pw - cwPx, oy); ctx.lineTo(ox + pw, oy + cdPx); ctx.lineTo(ox + pw, oy + pd); ctx.lineTo(ox, oy + pd);
+      } else if (cc === 'front-left') {
+        ctx.moveTo(ox, oy); ctx.lineTo(ox + pw, oy); ctx.lineTo(ox + pw, oy + pd); ctx.lineTo(ox + cwPx, oy + pd); ctx.lineTo(ox, oy + pd - cdPx);
+      } else if (cc === 'front-right') {
+        ctx.moveTo(ox, oy); ctx.lineTo(ox + pw, oy); ctx.lineTo(ox + pw, oy + pd - cdPx); ctx.lineTo(ox + pw - cwPx, oy + pd); ctx.lineTo(ox, oy + pd);
+      } else {
+        ctx.rect(ox, oy, pw, pd);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Front Setback & Chhajja Band
+      const sbPx = Math.min(pd * 0.45, (Number(state.frontSetbackFt) || 0) * scale);
+      if (sbPx > 2) {
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+        ctx.fillRect(ox, oy + pd - sbPx, pw, sbPx);
+        ctx.fillStyle = '#065f46';
+        ctx.font = 'bold 9.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`🚗 फ्रंट सेटबैक / पार्किंग (${state.frontSetbackFt} ft) • छज्जा: ${state.chhajjaFt} ft`, ox + pw / 2, oy + pd - sbPx / 2 + 3);
+      }
+
+      // Main Gate on Front Wall
+      const mgW = Math.min(pw * 0.6, (Number(state.mainGateW) || 9) * scale);
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(ox + pw - mgW - 8, oy + pd - 4, mgW, 8);
+      ctx.fillStyle = '#064e3b';
+      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🚪 मेन गेट (${state.mainGateW}'×${state.mainGateH}')`, ox + pw - mgW / 2 - 8, oy + pd + 15);
+
+      // Wall Labels
+      ctx.fillStyle = '#4c1d95';
+      ctx.font = 'bold 10.5px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`पीछे (Rear): ${state.walls[1].lengthFt}' (${state.walls[1].status.includes('बंद') ? '🔒 बंद पड़ोसी दीवार' : 'खुली'})`, ox + pw / 2, oy - 10);
+      ctx.fillText(`आगे (Front): ${state.walls[0].lengthFt}' • दिशा: ${getResolvedLabel(state.facingSelect, state.facingCustom)}`, ox + pw / 2, oy + pd + 29);
+
+      // Rooms & Objects
+      const rooms = computeLayoutRooms();
+      const rearClosed = state.walls[1]?.status.includes('बंद');
+      const leftClosed = state.walls[2]?.status.includes('बंद');
+      const rightClosed = state.walls[3]?.status.includes('बंद');
+
+      rooms.forEach(r => {
+        const rx = ox + r.x * scale;
+        const ry = oy + (D - r.y - r.l) * scale;
+        const rw = r.w * scale;
+        const rh = r.l * scale;
+        const isSel = selectedObjectId === r.id;
+        const locked = isObjectLocked(r.id);
+
+        ctx.save();
+        ctx.fillStyle = r.fill;
+        ctx.strokeStyle = isSel ? '#e11d48' : r.stroke;
+        ctx.lineWidth = isSel ? 3 : (isSketch ? 2.2 : 2);
+        if (isSketch) ctx.setLineDash([6, 3]);
+
+        // Room Polygon (supports individual room corner cut)
+        const rcc = r.cornerCut || 'none';
+        const rcw = Math.min(rw * 0.45, (Number(r.cornerCutW) || 3) * scale);
+        const rcd = Math.min(rh * 0.45, (Number(r.cornerCutD) || 3) * scale);
+
+        ctx.beginPath();
+        if (rcc === 'rear-left') {
+          ctx.moveTo(rx + rcw, ry); ctx.lineTo(rx + rw, ry); ctx.lineTo(rx + rw, ry + rh); ctx.lineTo(rx, ry + rh); ctx.lineTo(rx, ry + rcd);
+        } else if (rcc === 'rear-right') {
+          ctx.moveTo(rx, ry); ctx.lineTo(rx + rw - rcw, ry); ctx.lineTo(rx + rw, ry + rcd); ctx.lineTo(rx + rw, ry + rh); ctx.lineTo(rx, ry + rh);
+        } else if (rcc === 'front-left') {
+          ctx.moveTo(rx, ry); ctx.lineTo(rx + rw, ry); ctx.lineTo(rx + rw, ry + rh); ctx.lineTo(rx + rcw, ry + rh); ctx.lineTo(rx, ry + rh - rcd);
+        } else if (rcc === 'front-right') {
+          ctx.moveTo(rx, ry); ctx.lineTo(rx + rw, ry); ctx.lineTo(rx + rw, ry + rh - rcd); ctx.lineTo(rx + rw - rcw, ry + rh); ctx.lineTo(rx, ry + rh);
+        } else {
+          ctx.rect(rx, ry, rw, rh);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // OTS Cross Hatch
+        if (r.kind === 'ots') {
+          ctx.strokeStyle = '#ca8a04';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(rx, ry); ctx.lineTo(rx + rw, ry + rh);
+          ctx.moveTo(rx + rw, ry); ctx.lineTo(rx, ry + rh);
+          ctx.stroke();
+        }
+
+        // Staircase Steps Lines
+        if (r.kind === 'stair') {
+          ctx.strokeStyle = '#4338ca';
+          ctx.lineWidth = 1.2;
+          for (let s = 1; s <= 7; s++) {
+            const sy = ry + (rh / 8) * s;
+            ctx.beginPath(); ctx.moveTo(rx, sy); ctx.lineTo(rx + rw, sy); ctx.stroke();
+          }
+        }
+
+        // Door Swing Symbol
+        drawDoorSymbol(ctx, rx, ry, rw, rh, r.doorSwing, r.doorSize, scale);
+
+        // Window Bar (Respecting Neighbor Closed Walls)
+        if ((r.winCount || 0) > 0 && (r.winW || 0) > 0) {
+          const wPx = Math.min(rw * 0.75, r.winW * scale);
+          let winSide = r.winWall || 'auto';
+          if (winSide === 'auto') {
+            if (r.y <= (Number(state.frontSetbackFt) || 0) + 1) winSide = 'bottom';
+            else if (!rearClosed && r.y + r.l >= D - 1) winSide = 'top';
+            else if (!leftClosed && r.x <= 1) winSide = 'left';
+            else if (!rightClosed && r.x + r.w >= W - 1) winSide = 'right';
+            else winSide = 'bottom';
+          }
+          ctx.fillStyle = '#0ea5e9';
+          if (winSide === 'top') ctx.fillRect(rx + (rw - wPx) / 2, ry - 3, wPx, 6);
+          else if (winSide === 'left') ctx.fillRect(rx - 3, ry + (rh - wPx) / 2, 6, Math.min(rh * 0.75, wPx));
+          else if (winSide === 'right') ctx.fillRect(rx + rw - 3, ry + (rh - wPx) / 2, 6, Math.min(rh * 0.75, wPx));
+          else ctx.fillRect(rx + (rw - wPx) / 2, ry + rh - 3, wPx, 6);
+        }
+
+        // Room Text Label & Net Area
+        const netArea = r.kind === 'bedroom' ? computeRoomNetSqFt(r) : (r.w * r.l);
+        ctx.fillStyle = '#1e1b4b';
+        ctx.font = 'bold 10.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${locked ? '🔒 ' : ''}${r.name}`, rx + rw / 2, ry + rh / 2 - 3);
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '700 9px Inter, sans-serif';
+        ctx.fillText(`${r.w}'×${r.l}' (${netArea.toFixed(0)} Sq.Ft)`, rx + rw / 2, ry + rh / 2 + 9);
+
+        // Bottom-Right Resize Handle
+        if (!locked) {
+          ctx.fillStyle = isSel ? '#e11d48' : '#7c3aed';
+          ctx.fillRect(rx + rw - 7, ry + rh - 7, 7, 7);
+        }
+        ctx.restore();
+      });
+
+      // Red RCC Structural Columns at Corners & Grid Points
+      ctx.fillStyle = '#dc2626';
+      [0, 0.34, 0.67, 1].forEach(fx => {
+        [0, 0.34, 0.67, 1].forEach(fy => {
+          ctx.fillRect(ox + pw * fx - 3.5, oy + pd * fy - 3.5, 7, 7);
+        });
+      });
+
+      // Vastu Direction Compass Rose (Top-Right Corner of Canvas)
+      const cx = cssW - 36, cy = 36, cr = 20;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - cr + 3);
+      ctx.lineTo(cx - 4, cy);
+      ctx.lineTo(cx + 4, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#1e1b4b';
+      ctx.font = 'bold 8px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('N', cx, cy - cr + 10);
+      ctx.fillText('S', cx, cy + cr - 4);
+      ctx.fillText('W', cx - cr + 6, cy + 3);
+      ctx.fillText('E', cx + cr - 6, cy + 3);
+      ctx.restore();
+    }
+
+    function switchDrawStyle(style) {
+      currentDrawStyle = style;
+      const tB = document.getElementById('tabBlueprint');
+      const tS = document.getElementById('tabSketch');
+      const t3 = document.getElementById('tab3DView');
+      const skBar = document.getElementById('sketchBuilderToolbar');
+      const tdBar = document.getElementById('threeDControlsBar');
+      const c2W = document.getElementById('canvas2DWrapper');
+      const c3W = document.getElementById('canvas3DWrapper');
+
+      if (tB) tB.className = style === 'blueprint' ? 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow' : 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-purple-100 text-purple-900';
+      if (tS) tS.className = style === 'sketch' ? 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow' : 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-purple-100 text-purple-900';
+      if (t3) t3.className = style === '3d' ? 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow' : 'candy-btn px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-100 text-emerald-900';
+
+      if (skBar) skBar.classList.toggle('hidden', style !== 'sketch');
+      if (tdBar) tdBar.classList.toggle('hidden', style !== '3d');
+
+      if (style === '3d') {
+        if (c2W) c2W.classList.add('hidden');
+        if (c3W) c3W.classList.remove('hidden');
+        init3DSceneIfNeeded();
+        renderMain3DHouse();
+      } else {
+        if (c3W) c3W.classList.add('hidden');
+        if (c2W) c2W.classList.remove('hidden');
+        draw2DBlueprint();
+      }
+    }
+
+    function adjustCanvasZoom(delta) {
+      canvasZoom = Math.max(0.5, Math.min(2.4, Number((canvasZoom + delta).toFixed(2))));
+      const b = document.getElementById('zoomLevelBadge');
+      if (b) b.textContent = `${Math.round(canvasZoom * 100)}%`;
+      if (currentDrawStyle === '3d') {
+        threeOrbit.radius = Math.max(20, Math.min(130, threeOrbit.radius - delta * 25));
+        update3DCameraPosition();
+      } else {
+        draw2DBlueprint();
+      }
+    }
+
+    function resetCanvasZoom() {
+      canvasZoom = 1.0;
+      const b = document.getElementById('zoomLevelBadge');
+      if (b) b.textContent = '100%';
+      threeOrbit.radius = 68;
+      update3DCameraPosition();
+      draw2DBlueprint();
+    }
+
+    function resetManualLayout() {
+      recordUndoSnapshot();
+      state.manualBoxes = {};
+      updateAllOutputs(true);
+      showToast('↺ सभी कमरे डिफ़ॉल्ट जगह पर रीसेट हो गए', 'info');
+    }
+
+    function addSketchItem(kind) {
+      recordUndoSnapshot();
+      const labels = {
+        bedroom: 'नया बेडरूम',
+        kitchen: 'नया किचन',
+        bath: 'नया लैट-बाथ',
+        mandir: 'पूजा मंदिर',
+        store: 'स्टोर रूम',
+        ots: 'OTS जाल'
+      };
+      const id = 'sk_' + Date.now();
+      state.sketchExtraItems.push({
+        id,
+        kind,
+        name: labels[kind] || 'नया बॉक्स',
+        x: 6,
+        y: 12,
+        w: kind === 'bath' || kind === 'ots' || kind === 'mandir' ? 5 : 10,
+        l: kind === 'bath' || kind === 'ots' || kind === 'mandir' ? 6 : 11,
+        doorSize: kind === 'ots' ? '' : "3'×7'",
+        doorSwing: kind === 'ots' ? 'none' : 'bottom-left',
+        winCount: kind === 'bedroom' || kind === 'kitchen' ? 1 : 0,
+        winW: 4
+      });
+      updateAllOutputs(true);
+      showToast(`✨ "${labels[kind]}" स्केच में जोड़ दिया गया!`, 'success');
+    }
+
+    // =========================================================================
+    // 6. INTERACTIVE 2D DRAG, RESIZE, SINGLE-CLICK MOVE BAR & DOUBLE-CLICK MODAL
+    // =========================================================================
+    function setupInteractive2DCanvas() {
+      const canvas = document.getElementById('blueprintCanvas');
+      if (!canvas) return;
+
+      let dragMode = null; // 'move' | 'resize'
+      let dragObj = null;
+      let startX = 0, startY = 0;
+      let origBox = null;
+      let lastTapTime = 0;
+      let lastTapId = null;
+      let initialPinchDist = null;
+      let initialPinchZoom = 1.0;
+
+      const getPointerPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { px: clientX - rect.left, py: clientY - rect.top };
+      };
+
+      const hitTestRoom = (px, py) => {
+        const tr = getCanvasTransform();
+        if (!tr) return null;
+        const { D, scale, ox, oy } = tr;
+        const rooms = computeLayoutRooms();
+        for (let i = rooms.length - 1; i >= 0; i--) {
+          const r = rooms[i];
+          const rx = ox + r.x * scale;
+          const ry = oy + (D - r.y - r.l) * scale;
+          const rw = r.w * scale;
+          const rh = r.l * scale;
+          if (px >= rx && px <= rx + rw && py >= ry && py <= ry + rh) {
+            const isResize = (px >= rx + rw - 14 && py >= ry + rh - 14);
+            return { room: r, isResize };
+          }
+        }
+        return null;
+      };
+
+      const onDown = (e) => {
+        const { px, py } = getPointerPos(e);
+        const hit = hitTestRoom(px, py);
+        if (!hit) {
+          selectedObjectId = null;
+          hideBottomMoveBar();
+          draw2DBlueprint();
+          return;
+        }
+
+        const r = hit.room;
+        selectedObjectId = r.id;
+        showBottomMoveBar(r);
+        draw2DBlueprint();
+
+        // Double-tap / double-click detection for touch & mouse
+        const now = Date.now();
+        if (lastTapId === r.id && (now - lastTapTime) < 340) {
+          lastTapTime = 0;
+          openObjectInspectorDialog(r.id);
+          return;
+        }
+        lastTapId = r.id;
+        lastTapTime = now;
+
+        if (isObjectLocked(r.id)) {
+          showToast('🔒 यह ऑब्जेक्ट लॉक है! पहले डबल-क्लिक करके Unlock करें।', 'warn');
+          return;
+        }
+
+        recordUndoSnapshot();
+        dragMode = hit.isResize ? 'resize' : 'move';
+        dragObj = r;
+        startX = px;
+        startY = py;
+        origBox = { x: r.x, y: r.y, w: r.w, l: r.l };
+      };
+
+      const onMove = (e) => {
+        if (e.touches && e.touches.length === 2 && initialPinchDist) {
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          canvasZoom = Math.max(0.5, Math.min(2.4, Number((initialPinchZoom * (dist / initialPinchDist)).toFixed(2))));
+          const b = document.getElementById('zoomLevelBadge');
+          if (b) b.textContent = `${Math.round(canvasZoom * 100)}%`;
+          draw2DBlueprint();
+          return;
+        }
+        if (!dragObj || !dragMode) return;
+        e.preventDefault();
+        const tr = getCanvasTransform();
+        if (!tr) return;
+        const { px, py } = getPointerPos(e);
+        const dxFt = Math.round(((px - startX) / tr.scale) * 2) / 2;
+        const dyFt = Math.round(((startY - py) / tr.scale) * 2) / 2;
+
+        if (dragMode === 'move') {
+          const nx = Math.max(0, Math.min(tr.W - origBox.w, origBox.x + dxFt));
+          const ny = Math.max(0, Math.min(tr.D - origBox.l, origBox.y + dyFt));
+          state.manualBoxes[dragObj.id] = { x: nx, y: ny, w: origBox.w, l: origBox.l };
+        } else if (dragMode === 'resize') {
+          const nw = Math.max(3, Math.min(tr.W - origBox.x, origBox.w + dxFt));
+          const nl = Math.max(3, Math.min(tr.D - origBox.y, origBox.l - dyFt));
+          state.manualBoxes[dragObj.id] = { x: origBox.x, y: origBox.y, w: nw, l: nl };
+          syncResizedBoxBackToForm(dragObj.id, nw, nl);
+        }
+        updateAllOutputs(true);
+      };
+
+      const onUp = () => {
+        dragMode = null;
+        dragObj = null;
+        initialPinchDist = null;
+      };
+
+      canvas.addEventListener('mousedown', onDown);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          initialPinchDist = Math.hypot(dx, dy);
+          initialPinchZoom = canvasZoom;
+          dragMode = null;
+          return;
+        }
+        onDown(e);
+      }, { passive: false });
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', onUp);
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        adjustCanvasZoom(e.deltaY < 0 ? 0.1 : -0.1);
+      }, { passive: false });
+      canvas.addEventListener('dblclick', (e) => {
+        const { px, py } = getPointerPos(e);
+        const hit = hitTestRoom(px, py);
+        if (hit) openObjectInspectorDialog(hit.room.id);
+      });
+    }
+
+    function syncResizedBoxBackToForm(id, nw, nl) {
+      const b = state.bedrooms.find(item => item.id === id);
+      if (b) { b.w = nw; b.l = nl; renderBedroomsUI(); return; }
+      if (id === 'kitchen') { state.kitchenW = nw; state.kitchenL = nl; syncUIFromState(); return; }
+      if (id === 'hall') { state.hallW = nw; state.hallL = nl; syncUIFromState(); return; }
+      if (id === 'bath_sep') { state.sepBathW = nw; state.sepBathL = nl; syncUIFromState(); return; }
+      if (id === 'ots') { state.otsW = nw; state.otsL = nl; syncUIFromState(); return; }
+      if (id.startsWith('fac_')) {
+        const fid = id.replace('fac_', '');
+        if (state.facilityDetails[fid]) { state.facilityDetails[fid].w = nw; state.facilityDetails[fid].l = nl; renderFacilitiesUI(); }
+        return;
+      }
+      const ex = (state.sketchExtraItems || []).find(item => item.id === id);
+      if (ex) { ex.w = nw; ex.l = nl; }
+    }
+
+    function showBottomMoveBar(room) {
+      const bar = document.getElementById('bottomMoveControlBar');
+      const lbl = document.getElementById('bottomMoveObjLabel');
+      if (!bar || !lbl) return;
+      lbl.textContent = `📐 ${room.name} (${room.w}'×${room.l}')`;
+      bar.classList.remove('hidden');
+    }
+
+    function hideBottomMoveBar() {
+      const bar = document.getElementById('bottomMoveControlBar');
+      if (bar) bar.classList.add('hidden');
+    }
+
+    function openSelectedInInspector() {
+      if (selectedObjectId) openObjectInspectorDialog(selectedObjectId);
+    }
+
+    function nudgeSelectedObject(dx, dy) {
+      if (!selectedObjectId) return;
+      if (isObjectLocked(selectedObjectId)) {
+        showToast('🔒 यह ऑब्जेक्ट लॉक है! पहले Unlock करें।', 'warn');
+        return;
+      }
+      const rooms = computeLayoutRooms();
+      const r = rooms.find(item => item.id === selectedObjectId);
+      if (!r) return;
+      const m = calculatePlotMetrics();
+      const W = m.wFront, D = Math.max(m.dLeft, m.dRight);
+      recordUndoSnapshot();
+      const nx = Math.max(0, Math.min(W - r.w, r.x + dx));
+      const ny = Math.max(0, Math.min(D - r.l, r.y + dy));
+      state.manualBoxes[r.id] = { x: nx, y: ny, w: r.w, l: r.l };
+      updateAllOutputs(true);
+    }
+
+    // =========================================================================
+    // 7. DOUBLE-CLICK OBJECT INSPECTOR MODAL (LIVE SVG + CORNER CUT + LOCK)
+    // =========================================================================
+    function openObjectInspectorDialog(id) {
+      const rooms = computeLayoutRooms();
+      const r = rooms.find(item => item.id === id);
+      if (!r) return;
+      inspectorObjectId = id;
+      selectedObjectId = id;
+
+      document.getElementById('inspDialogTitle').textContent = `📐 ${r.name}`;
+      document.getElementById('inspNameInput').value = r.name;
+      document.getElementById('inspWInput').value = r.w;
+      document.getElementById('inspLInput').value = r.l;
+      document.getElementById('inspDoorSizeInput').value = r.doorSize || "3.5'×7'";
+      document.getElementById('inspDoorSwingSelect').value = r.doorSwing || 'none';
+      document.getElementById('inspWinWInput').value = r.winW || 0;
+      document.getElementById('inspWinWallSelect').value = r.winWall || 'auto';
+
+      const cornerGroup = document.getElementById('inspRoomCornerGroup');
+      const cornerSel = document.getElementById('inspCornerSelect');
+      const cornerDims = document.getElementById('inspCornerCutDimsBox');
+      if (r.kind === 'bedroom') {
+        cornerGroup.classList.remove('hidden');
+        cornerSel.value = r.cornerCut || 'none';
+        document.getElementById('inspCornerCutWInput').value = r.cornerCutW || 3;
+        document.getElementById('inspCornerCutDInput').value = r.cornerCutD || 3;
+        cornerDims.classList.toggle('hidden', (r.cornerCut || 'none') === 'none');
+      } else {
+        cornerGroup.classList.add('hidden');
+        cornerDims.classList.add('hidden');
+      }
+
+      refreshInspectorLockAndSvg(r);
+      document.getElementById('objectInspectorBackdrop').classList.remove('hidden');
+    }
+
+    function refreshInspectorLockAndSvg(r) {
+      const locked = isObjectLocked(r.id);
+      const lockBtn = document.getElementById('inspLockToggleBtn');
+      const notice = document.getElementById('inspLockedNotice');
+      const fields = document.getElementById('inspEditableFields');
+      const delBtn = document.getElementById('inspDeleteBtn');
+
+      if (lockBtn) lockBtn.textContent = locked ? '🔒 Locked' : '🔓 Unlocked';
+      if (notice) notice.classList.toggle('hidden', !locked);
+      if (fields) {
+        fields.style.opacity = locked ? '0.5' : '1';
+        fields.style.pointerEvents = locked ? 'none' : 'auto';
+      }
+      if (delBtn) delBtn.disabled = locked;
+
+      const netArea = r.kind === 'bedroom' ? computeRoomNetSqFt(r) : (r.w * r.l);
+      const remBadge = document.getElementById('inspRemainingSqFtBadge');
+      if (remBadge) remBadge.textContent = `शेष एरिया: ${netArea.toFixed(1)} Sq.Ft`;
+
+      document.getElementById('inspLiveSummaryBadge').textContent =
+        `${r.w}' × ${r.l}' • शुद्ध क्षेत्रफल: ${netArea.toFixed(1)} Sq.Ft • गेट: ${r.doorSize || 'N/A'} • विंडो: ${r.winW || 0}'`;
+
+      // Dynamic Live SVG Preview Illustration
+      const svgBox = document.getElementById('inspSvgPreviewBox');
+      if (svgBox) {
+        const cc = r.cornerCut || 'none';
+        let poly = '45,15 215,15 215,125 45,125';
+        if (cc === 'rear-left') poly = '75,15 215,15 215,125 45,125 45,45';
+        else if (cc === 'rear-right') poly = '45,15 185,15 215,45 215,125 45,125';
+        else if (cc === 'front-left') poly = '45,15 215,15 215,125 75,125 45,95';
+        else if (cc === 'front-right') poly = '45,15 215,15 215,95 185,125 45,125';
+
+        svgBox.innerHTML = `
+          <svg viewBox="0 0 260 140" class="w-full h-full">
+            <polygon points="${poly}" fill="${r.fill || '#f3e8ff'}" stroke="${r.stroke || '#7e22ce'}" stroke-width="3" />
+            ${r.doorSwing && r.doorSwing !== 'none' ? `<path d="M 60 125 L 60 95 A 30 30 0 0 1 90 125 Z" fill="rgba(245,158,11,0.35)" stroke="#d97706" stroke-width="2" />` : ''}
+            ${(r.winW || 0) > 0 ? `<rect x="105" y="11" width="50" height="8" rx="2" fill="#0ea5e9" />` : ''}
+            <text x="130" y="68" text-anchor="middle" font-size="12" font-weight="800" fill="#1e1b4b">${r.name}</text>
+            <text x="130" y="85" text-anchor="middle" font-size="10" font-weight="700" fill="#4c1d95">${r.w}' × ${r.l}' (${netArea.toFixed(1)} Sq.Ft)</text>
+          </svg>
+        `;
+      }
+    }
+
+    function applyInspectorLiveEdit() {
+      if (!inspectorObjectId || isObjectLocked(inspectorObjectId)) return;
+      const name = document.getElementById('inspNameInput').value;
+      const w = Math.max(2, Number(document.getElementById('inspWInput').value) || 5);
+      const l = Math.max(2, Number(document.getElementById('inspLInput').value) || 5);
+      const doorSize = document.getElementById('inspDoorSizeInput').value;
+      const doorSwing = document.getElementById('inspDoorSwingSelect').value;
+      const winW = Math.max(0, Number(document.getElementById('inspWinWInput').value) || 0);
+      const winWall = document.getElementById('inspWinWallSelect').value;
+      const cornerCut = document.getElementById('inspCornerSelect').value;
+      const cornerCutW = Math.max(1, Number(document.getElementById('inspCornerCutWInput').value) || 3);
+      const cornerCutD = Math.max(1, Number(document.getElementById('inspCornerCutDInput').value) || 3);
+
+      document.getElementById('inspCornerCutDimsBox').classList.toggle('hidden', cornerCut === 'none');
+
+      const b = state.bedrooms.find(item => item.id === inspectorObjectId);
+      if (b) {
+        b.name = name; b.w = w; b.l = l; b.doorSize = doorSize; b.doorSwing = doorSwing;
+        b.winW = winW; b.winCount = winW > 0 ? Math.max(1, b.winCount || 1) : 0; b.winWall = winWall;
+        b.cornerCut = cornerCut; b.cornerCutW = cornerCutW; b.cornerCutD = cornerCutD;
+        renderBedroomsUI();
+      } else if (inspectorObjectId === 'kitchen') {
+        state.kitchenW = w; state.kitchenL = l; syncUIFromState();
+      } else if (inspectorObjectId === 'hall') {
+        state.hallW = w; state.hallL = l; syncUIFromState();
+      } else if (inspectorObjectId === 'bath_sep') {
+        state.sepBathW = w; state.sepBathL = l; syncUIFromState();
+      } else if (inspectorObjectId.startsWith('fac_')) {
+        const fid = inspectorObjectId.replace('fac_', '');
+        if (state.facilityDetails[fid]) {
+          state.facilityDetails[fid].w = w; state.facilityDetails[fid].l = l; state.facilityDetails[fid].doorSwing = doorSwing;
+          renderFacilitiesUI();
+        }
+      } else {
+        const ex = (state.sketchExtraItems || []).find(item => item.id === inspectorObjectId);
+        if (ex) { ex.name = name; ex.w = w; ex.l = l; ex.doorSize = doorSize; ex.doorSwing = doorSwing; ex.winW = winW; }
+      }
+
+      if (state.manualBoxes[inspectorObjectId]) {
+        state.manualBoxes[inspectorObjectId].w = w;
+        state.manualBoxes[inspectorObjectId].l = l;
+      }
+      updateAllOutputs(true);
+      const updated = computeLayoutRooms().find(item => item.id === inspectorObjectId);
+      if (updated) refreshInspectorLockAndSvg(updated);
+    }
+
+    function toggleSelectedObjectLock() {
+      if (!inspectorObjectId) return;
+      recordUndoSnapshot();
+      state.lockedIds[inspectorObjectId] = !state.lockedIds[inspectorObjectId];
+      const r = computeLayoutRooms().find(item => item.id === inspectorObjectId);
+      if (r) refreshInspectorLockAndSvg(r);
+      updateAllOutputs(true);
+      showToast(state.lockedIds[inspectorObjectId] ? '🔒 ऑब्जेक्ट लॉक कर दिया गया' : '🔓 ऑब्जेक्ट अनलॉक कर दिया गया', 'info');
+    }
+
+    function deleteObjectFromInspector() {
+      if (!inspectorObjectId || isObjectLocked(inspectorObjectId)) return;
+      recordUndoSnapshot();
+      const id = inspectorObjectId;
+      const bIdx = state.bedrooms.findIndex(item => item.id === id);
+      if (bIdx >= 0 && state.bedrooms.length > 1) {
+        state.bedrooms.splice(bIdx, 1);
+        renderBedroomsUI();
+      } else if (id === 'bath_sep') {
+        state.bathSeparate = false;
+        syncUIFromState();
+      } else if (id.startsWith('fac_')) {
+        const fid = id.replace('fac_', '');
+        state.facilities = state.facilities.filter(f => f !== fid);
+        renderFacilitiesUI();
+      } else {
+        state.sketchExtraItems = (state.sketchExtraItems || []).filter(item => item.id !== id);
+      }
+      delete state.manualBoxes[id];
+      selectedObjectId = null;
+      hideBottomMoveBar();
+      saveAndCloseObjectInspector();
+      showToast('🗑️ ऑब्जेक्ट हटा दिया गया', 'info');
+    }
+
+    function saveAndCloseObjectInspector() {
+      inspectorObjectId = null;
+      document.getElementById('objectInspectorBackdrop').classList.add('hidden');
+      updateAllOutputs(true);
+    }
+
+    function handleInspectorBackdropClick(e) {
+      if (e.target.id === 'objectInspectorBackdrop') saveAndCloseObjectInspector();
+    }
+
+    // =========================================================================
+    // 8. 3D & 4D VIEW-ONLY VISUALIZATION ENGINE (THREE.JS)
+    // =========================================================================
+    function init3DSceneIfNeeded() {
+      const mount = document.getElementById('threeDMount');
+      if (!mount || threeRenderer) return;
+      const w = Math.max(320, mount.clientWidth || 640);
+      const h = Math.max(430, mount.clientHeight || 520);
+
+      threeScene = new THREE.Scene();
+      threeScene.background = new THREE.Color(0xe0f2fe);
+
+      threeCamera = new THREE.PerspectiveCamera(45, w / h, 0.5, 500);
+      update3DCameraPosition();
+
+      threeRenderer = new THREE.WebGLRenderer({ antialias: true });
+      threeRenderer.setSize(w, h);
+      threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      mount.innerHTML = '';
+      mount.appendChild(threeRenderer.domElement);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x78350f, 0.95);
+      threeScene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xfffbeb, 0.85);
+      dir.position.set(35, 65, 45);
+      threeScene.add(dir);
+
+      threeHouseGroup = new THREE.Group();
+      threeScene.add(threeHouseGroup);
+
+      // Orbit drag controls (View-Only, no object editing in 3D)
+      let dragging = false, prevX = 0, prevY = 0;
+      const dom = threeRenderer.domElement;
+      dom.addEventListener('mousedown', e => { dragging = true; prevX = e.clientX; prevY = e.clientY; });
+      window.addEventListener('mouseup', () => { dragging = false; });
+      window.addEventListener('mousemove', e => {
+        if (!dragging || currentDrawStyle !== '3d') return;
+        threeOrbit.theta -= (e.clientX - prevX) * 0.008;
+        threeOrbit.phi = Math.max(0.25, Math.min(1.42, threeOrbit.phi - (e.clientY - prevY) * 0.008));
+        prevX = e.clientX; prevY = e.clientY;
+        update3DCameraPosition();
+      });
+      dom.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) { dragging = true; prevX = e.touches[0].clientX; prevY = e.touches[0].clientY; }
+      }, { passive: true });
+      dom.addEventListener('touchmove', e => {
+        if (dragging && e.touches.length === 1 && currentDrawStyle === '3d') {
+          threeOrbit.theta -= (e.touches[0].clientX - prevX) * 0.008;
+          threeOrbit.phi = Math.max(0.25, Math.min(1.42, threeOrbit.phi - (e.touches[0].clientY - prevY) * 0.008));
+          prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+          update3DCameraPosition();
+        }
+      }, { passive: true });
+      dom.addEventListener('touchend', () => { dragging = false; });
+
+      animate3DLoop();
+    }
+
+    function update3DCameraPosition() {
+      if (!threeCamera) return;
+      const r = threeOrbit.radius;
+      threeCamera.position.set(
+        r * Math.sin(threeOrbit.phi) * Math.sin(threeOrbit.theta),
+        r * Math.cos(threeOrbit.phi),
+        r * Math.sin(threeOrbit.phi) * Math.cos(threeOrbit.theta)
+      );
+      threeCamera.lookAt(0, 3, 0);
+    }
+
+    function set3DMode(mode) {
+      threeMode = mode;
+      threeOrbit.phi = mode === '4d' ? 0.68 : 0.85;
+      threeOrbit.radius = mode === '4d' ? 46 : 68;
+      update3DCameraPosition();
+      renderMain3DHouse();
+      showToast(mode === '4d' ? '🚶‍♂️ 4D बंद ब्राउन दीवारों के अंदर का व्यू सक्रिय' : '🏠 3D कटअवे व्यू सक्रिय', 'info');
+    }
+
+    function toggle3DLighting() {
+      threeIsNight = !threeIsNight;
+      if (threeScene) {
+        threeScene.background = new THREE.Color(threeIsNight ? 0x1e1b4b : 0xe0f2fe);
+        threeScene.children.forEach(ch => {
+          if (ch.isHemisphereLight) ch.intensity = threeIsNight ? 0.55 : 0.95;
+          if (ch.isDirectionalLight) ch.intensity = threeIsNight ? 0.45 : 0.85;
+        });
+      }
+    }
+
+    function toggle3DAutoRotate() {
+      threeAutoRotate = !threeAutoRotate;
+    }
+
+    function jump4DToRoom(roomId) {
+      if (roomId === 'overview') {
+        threeOrbit = { theta: 0.65, phi: 0.85, radius: 68 };
+        update3DCameraPosition();
+        return;
+      }
+      const m = calculatePlotMetrics();
+      const W = m.wFront, D = Math.max(m.dLeft, m.dRight);
+      const room = computeLayoutRooms().find(r => r.id === roomId);
+      if (!room || !threeCamera) return;
+      const cx = (room.x + room.w / 2) - W / 2;
+      const cz = (D / 2) - (room.y + room.l / 2);
+      threeCamera.position.set(cx, 16, cz + 14);
+      threeCamera.lookAt(cx, 2, cz);
+    }
+
+    function make3DLabelSprite(text) {
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = 'rgba(30, 27, 75, 0.88)';
+      ctx.beginPath();
+      ctx.roundRect(8, 8, 304, 48, 16);
+      ctx.fill();
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 160, 39);
+      const tex = new THREE.CanvasTexture(c);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(11, 2.2, 1);
+      return sp;
+    }
+
+    function renderMain3DHouse() {
+      if (!threeHouseGroup) return;
+      while (threeHouseGroup.children.length > 0) {
+        threeHouseGroup.remove(threeHouseGroup.children[0]);
+      }
+      threeRoomMeshes = [];
+
+      const m = calculatePlotMetrics();
+      const W = m.wFront, D = Math.max(m.dLeft, m.dRight);
+      const wallH = threeMode === '4d' ? (Number(state.ceilingHeightFt) || 12) : 6.0;
+
+      // Ground Plinth Slab (Dark Slate Stone)
+      const plinthGeo = new THREE.BoxGeometry(W + 2, 1.2, D + 2);
+      const plinthMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 });
+      const plinth = new THREE.Mesh(plinthGeo, plinthMat);
+      plinth.position.set(0, -0.6, 0);
+      threeHouseGroup.add(plinth);
+
+      // Floor Tile Base (Rich Teak/Walnut Brown in 4D, Warm Sand Marble in 3D)
+      const floorGeo = new THREE.BoxGeometry(W, 0.22, D);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: threeMode === '4d' ? 0x5c3419 : 0xe2e8f0,
+        roughness: 0.7
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.position.set(0, 0.11, 0);
+      threeHouseGroup.add(floor);
+
+      // Enclosed Outer Boundary Walls in 4D Mode (Rich Chocolate Brown with Cream Trim)
+      if (threeMode === '4d') {
+        const outerWallMat = new THREE.MeshStandardMaterial({ color: 0x6b3e26, roughness: 0.8 });
+        const rearWall = new THREE.Mesh(new THREE.BoxGeometry(W, wallH, 0.75), outerWallMat);
+        rearWall.position.set(0, wallH / 2, -D / 2);
+        threeHouseGroup.add(rearWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.75, wallH, D), outerWallMat);
+        leftWall.position.set(-W / 2, wallH / 2, 0);
+        threeHouseGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.75, wallH, D), outerWallMat);
+        rightWall.position.set(W / 2, wallH / 2, 0);
+        threeHouseGroup.add(rightWall);
+      }
+
+      // Distinct High-Contrast Room Floor & Wall Palettes so NOTHING looks washed-out white
+      const kindPalettes = {
+        bedroom: { floor3D: 0xd8b4fe, floor4D: 0x7c4a2d, wall3D: 0x9333ea, wall4D: 0x5c3317 },
+        kitchen: { floor3D: 0xfde68a, floor4D: 0x854d0e, wall3D: 0xd97706, wall4D: 0x6b3e26 },
+        hall:    { floor3D: 0xbae6fd, floor4D: 0x6f4226, wall3D: 0x0284c7, wall4D: 0x5a3219 },
+        bath:    { floor3D: 0x99f6e4, floor4D: 0x115e59, wall3D: 0x0d9488, wall4D: 0x4a2c18 },
+        stair:   { floor3D: 0xc7d2fe, floor4D: 0x4c1d95, wall3D: 0x4338ca, wall4D: 0x5c3419 },
+        mandir:  { floor3D: 0xfed7aa, floor4D: 0x9a3412, wall3D: 0xea580c, wall4D: 0x6b3e26 },
+        ots:     { floor3D: 0xfef08a, floor4D: 0xa16207, wall3D: 0xca8a04, wall4D: 0x78350f },
+        facility:{ floor3D: 0xbbf7d0, floor4D: 0x166534, wall3D: 0x16a34a, wall4D: 0x5c3419 }
+      };
+
+      const rooms = computeLayoutRooms();
+      const sel = document.getElementById('walkthroughRoomSelect');
+      if (sel) {
+        const curVal = sel.value;
+        sel.innerHTML = '<option value="overview">पूरा घर (Overview)</option>' +
+          rooms.map(r => `<option value="${r.id}">${r.name} (${r.w}'×${r.l}')</option>`).join('');
+        if ([...sel.options].some(o => o.value === curVal)) sel.value = curVal;
+      }
+
+      rooms.forEach(room => {
+        const cx = (room.x + room.w / 2) - W / 2;
+        const cz = (D / 2) - (room.y + room.l / 2);
+        const pal = kindPalettes[room.kind] || kindPalettes.bedroom;
+
+        // Distinct Room Floor Tile
+        const rFloor = new THREE.Mesh(
+          new THREE.BoxGeometry(room.w - 0.25, 0.28, room.l - 0.25),
+          new THREE.MeshStandardMaterial({
+            color: threeMode === '4d' ? pal.floor4D : pal.floor3D,
+            roughness: 0.65
+          })
+        );
+        rFloor.position.set(cx, 0.24, cz);
+        threeHouseGroup.add(rFloor);
+
+        // Room Partition Walls (Rich Brown in 4D, Distinct Colored Architectural Walls in 3D with Top Dark Cap)
+        const wMat = new THREE.MeshStandardMaterial({
+          color: threeMode === '4d' ? pal.wall4D : pal.wall3D,
+          roughness: 0.75
+        });
+        const capMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.5 });
+        const t = 0.42;
+
+        const addWallWithCap = (gw, gh, gd, px, py, pz) => {
+          const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(gw, gh, gd), wMat);
+          wallMesh.position.set(px, py, pz);
+          const capMesh = new THREE.Mesh(new THREE.BoxGeometry(gw + 0.06, 0.25, gd + 0.06), capMat);
+          capMesh.position.set(px, gh + 0.12, pz);
+          threeHouseGroup.add(wallMesh, capMesh);
+        };
+
+        addWallWithCap(room.w, wallH, t, cx, wallH / 2, cz - room.l / 2);
+        addWallWithCap(room.w, wallH, t, cx, wallH / 2, cz + room.l / 2);
+        addWallWithCap(t, wallH, room.l, cx - room.w / 2, wallH / 2, cz);
+        addWallWithCap(t, wallH, room.l, cx + room.w / 2, wallH / 2, cz);
+
+        // Visible Door Frame (Teak Wood Door on Room Entry)
+        if (room.doorSwing && room.doorSwing !== 'none') {
+          const doorMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(3.2, Math.min(wallH - 0.5, 6.8), 0.55),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 })
+          );
+          doorMesh.position.set(cx - room.w * 0.22, Math.min(wallH - 0.5, 6.8) / 2, cz + room.l / 2);
+          threeHouseGroup.add(doorMesh);
+        }
+
+        // Visible Sky-Blue Glass Window Frame
+        if ((room.winCount || 0) > 0 && (room.winW || 0) > 0) {
+          const winMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(Math.min(room.w - 1, room.winW), 3.4, 0.6),
+            new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0369a1, emissiveIntensity: 0.35 })
+          );
+          winMesh.position.set(cx, Math.min(wallH * 0.55, 4.5), cz - room.l / 2);
+          threeHouseGroup.add(winMesh);
+        }
+
+        // Realistic High-Contrast Furniture so Every Object is Unmistakable
+        if (room.kind === 'bedroom') {
+          // Dark Rosewood Bed Frame + Coral Blanket + White Pillows
+          const bw = Math.min(room.w * 0.58, 6.0);
+          const bl = Math.min(room.l * 0.54, 6.5);
+          const bedFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(bw, 1.3, bl),
+            new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.5 })
+          );
+          bedFrame.position.set(cx, 0.85, cz);
+
+          const blanket = new THREE.Mesh(
+            new THREE.BoxGeometry(bw * 0.94, 0.45, bl * 0.92),
+            new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.6 })
+          );
+          blanket.position.set(cx, 1.65, cz);
+
+          const pillow1 = new THREE.Mesh(
+            new THREE.BoxGeometry(bw * 0.36, 0.35, 1.1),
+            new THREE.MeshStandardMaterial({ color: 0xfef08a })
+          );
+          pillow1.position.set(cx - bw * 0.22, 1.98, cz - bl * 0.32);
+
+          const pillow2 = pillow1.clone();
+          pillow2.position.set(cx + bw * 0.22, 1.98, cz - bl * 0.32);
+
+          threeHouseGroup.add(bedFrame, blanket, pillow1, pillow2);
+        } else if (room.kind === 'kitchen') {
+          // Black Granite Counter + Red/Silver Gas Stove + Sink
+          const slab = new THREE.Mesh(
+            new THREE.BoxGeometry(room.w - 0.8, 2.7, 2.1),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3 })
+          );
+          slab.position.set(cx, 1.45, cz - room.l / 2 + 1.25);
+
+          const stove = new THREE.Mesh(
+            new THREE.BoxGeometry(2.4, 0.35, 1.4),
+            new THREE.MeshStandardMaterial({ color: 0xf97316 })
+          );
+          stove.position.set(cx - 1.2, 2.95, cz - room.l / 2 + 1.25);
+
+          const sink = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8, 0.25, 1.3),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8 })
+          );
+          sink.position.set(cx + 1.5, 2.9, cz - room.l / 2 + 1.25);
+
+          threeHouseGroup.add(slab, stove, sink);
+        } else if (room.kind === 'hall') {
+          // Royal Indigo Sofa + Amber Center Table
+          const sofa = new THREE.Mesh(
+            new THREE.BoxGeometry(Math.min(room.w * 0.62, 7.2), 1.9, 2.5),
+            new THREE.MeshStandardMaterial({ color: 0x4f46e5, roughness: 0.6 })
+          );
+          sofa.position.set(cx, 1.05, cz - 1.6);
+
+          const sofaBack = new THREE.Mesh(
+            new THREE.BoxGeometry(Math.min(room.w * 0.62, 7.2), 1.4, 0.6),
+            new THREE.MeshStandardMaterial({ color: 0x312e81 })
+          );
+          sofaBack.position.set(cx, 2.2, cz - 2.55);
+
+          const table = new THREE.Mesh(
+            new THREE.BoxGeometry(3.4, 1.15, 1.9),
+            new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 })
+          );
+          table.position.set(cx, 0.75, cz + 1.3);
+
+          threeHouseGroup.add(sofa, sofaBack, table);
+        } else if (room.kind === 'bath') {
+          // Contrasting Cyan-Blue Washbasin + Coral-Orange WC Seat + Shower Pipe
+          const wc = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 1.7, 2.1),
+            new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3 })
+          );
+          wc.position.set(cx - room.w / 4, 0.95, cz);
+
+          const basin = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 2.5, 1.4),
+            new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3 })
+          );
+          basin.position.set(cx + room.w / 4, 1.35, cz);
+
+          threeHouseGroup.add(wc, basin);
+        } else if (room.kind === 'stair') {
+          for (let s = 0; s < 8; s++) {
+            const st = new THREE.Mesh(
+              new THREE.BoxGeometry(room.w * 0.5, 0.75, 1.05),
+              new THREE.MeshStandardMaterial({ color: s % 2 === 0 ? 0x4f46e5 : 0xf59e0b })
+            );
+            st.position.set(cx - room.w * 0.18, 0.5 + s * 0.68, cz + room.l / 2 - 1 - s * 1.0);
+            threeHouseGroup.add(st);
+          }
+        } else if (room.kind === 'mandir') {
+          const temple = new THREE.Mesh(
+            new THREE.BoxGeometry(Math.min(room.w * 0.65, 3.2), 3.4, Math.min(room.l * 0.55, 2.6)),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 })
+          );
+          temple.position.set(cx, 1.8, cz);
+          threeHouseGroup.add(temple);
+        }
+
+        // Floating 3D Label Sprite
+        const label = make3DLabelSprite(`${room.name} (${room.w}'×${room.l}')`);
+        label.position.set(cx, wallH + 1.5, cz);
+        threeHouseGroup.add(label);
+      });
+
+      // Optional 1st Floor Second Story Box Preview
+      if (state.hasFirstFloor) {
+        const ffFloor = new THREE.Mesh(
+          new THREE.BoxGeometry(W, 0.6, D - (Number(state.frontSetbackFt) || 0)),
+          new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.55 })
+        );
+        ffFloor.position.set(0, wallH + 0.35, -(Number(state.frontSetbackFt) || 0) / 2);
+        threeHouseGroup.add(ffFloor);
+
+        const ffLabel = make3DLabelSprite(`🏢 1st Floor (${state.firstFloorMode === 'same' ? 'Same' : 'Separate'})`);
+        ffLabel.position.set(0, wallH + 3.2, 0);
+        threeHouseGroup.add(ffLabel);
+      }
+    }
+
+    function animate3DLoop() {
+      threeAnimId = requestAnimationFrame(animate3DLoop);
+      if (threeAutoRotate && currentDrawStyle === '3d') {
+        threeOrbit.theta += 0.005;
+        update3DCameraPosition();
+      }
+      if (threeRenderer && threeScene && threeCamera && currentDrawStyle === '3d') {
+        threeRenderer.render(threeScene, threeCamera);
+      }
+    }
+
+    // =========================================================================
+    // 10. STAR-ONLY SAMPLE LIBRARY MODAL (HINDI DETAILS + APPLY TO PROJECT)
+    // =========================================================================
+    const SAMPLE_LIBRARY_PRESETS = [
+      {
+        id: 'p30x50all',
+        badge: "⭐ 30' × 50' (3BHK All-in-One)",
+        title: '3BHK संपूर्ण मास्टर नक्शा (3 कमरे + हॉल + किचन + मंदिर + पार्किंग + OTS + बाथ + सीढ़ियां)',
+        desc: "1,500 Sq.Ft का आदर्श भारतीय इंजीनियरिंग नक्शा: 3 बड़े बेडरूम, आग्नेय किचन (8'×10'), बड़ा लिविंग-डाइनिंग हॉल (14'×16'), ईशान पूजा मंदिर (5'×6'), आगे 10' कार पार्किंग पोर्च + 9'×7' मेन गेट, OTS वेंटिलेशन जाल, 2 नहाने के बाथरूम (लैट-बाथ), सीढ़ियां, हर कमरे में गेट व खिड़कियां।",
+        w: 30, d: 50, ceil: 12.5,
+        bedrooms: [
+          { id: 's_b1', name: 'मास्टर बेडरूम 1', w: 12, l: 13, zone: 'पीछे बाएँ (Rear-Left)', doorSize: "3.5'×7'", doorSwing: 'bottom-right', winCount: 1, winW: 5, winWall: 'auto', cornerCut: 'none', cornerCutW: 3, cornerCutD: 3, note: 'अटैच बाथरूम व वॉर्डरोब' },
+          { id: 's_b2', name: 'बेडरूम 2', w: 12, l: 13, zone: 'पीछे दाएँ (Rear-Right)', doorSize: "3.5'×7'", doorSwing: 'bottom-left', winCount: 1, winW: 5, winWall: 'auto', cornerCut: 'none', cornerCutW: 3, cornerCutD: 3, note: 'OTS वेंटिलेशन विंडो' },
+          { id: 's_b3', name: 'बेडरूम 3 (गेस्ट)', w: 11, l: 11, zone: 'आगे बाएँ (Front-Left)', doorSize: "3.5'×7'", doorSwing: 'bottom-right', winCount: 1, winW: 5, winWall: 'bottom', cornerCut: 'none', cornerCutW: 3, cornerCutD: 3, note: 'फ्रंट विंडो 5×4' }
+        ],
+        kitchenW: 8, kitchenL: 10, hallW: 14, hallL: 16,
+        facilities: ['mandir', 'dining', 'handwash', 'ugtank', 'septic'],
+        frontSetbackFt: 9
+      }
+    ];
+
+    let activeSampleIndex = 0;
+
+    function openSampleLibraryModal() {
+      const modal = document.getElementById('sampleLibraryBackdrop');
+      if (!modal) return;
+      renderSampleLibraryContent(0);
+      modal.classList.remove('hidden');
+    }
+
+    function closeSampleLibraryModal() {
+      const modal = document.getElementById('sampleLibraryBackdrop');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderSampleLibraryContent(idx) {
+      activeSampleIndex = 0;
+      const tabs = document.getElementById('samplePresetTabs');
+      const card = document.getElementById('samplePresetDetailCard');
+      if (!tabs || !card) return;
+
+      const p = SAMPLE_LIBRARY_PRESETS[0];
+      tabs.innerHTML = `
+        <span class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-purple-700 text-white shadow">
+          ${p.badge} • संपूर्ण इंजीनियरिंग व वास्तु मानक सैंपल
+        </span>
+      `;
+
+      const sqFt = p.w * p.d;
+      card.innerHTML = `
+        <div class="md:col-span-6 space-y-3">
+          <div class="inline-block px-3 py-1 rounded-full bg-amber-400 text-amber-950 font-black text-xs">${p.badge} • ${sqFt} Sq.Ft (${(sqFt / 9).toFixed(1)} गज)</div>
+          <h3 class="text-lg sm:text-xl font-black text-indigo-950">${p.title}</h3>
+          <p class="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">${p.desc}</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>बाहरी/अंदर दीवार:</b> 9" / 4.5"</div>
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>मेन / रूम गेट:</b> 9'×7' / 3.5'×7'</div>
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>खिड़की व OTS:</b> 5'×4' + 4'×4' OTS</div>
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>किचन व मंदिर:</b> ${p.kitchenW}'×${p.kitchenL}' + 5'×6' मंदिर</div>
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>हॉल व पार्किंग:</b> ${p.hallW}'×${p.hallL}' + पोर्च</div>
+            <div class="p-2 rounded-xl bg-white border border-purple-200"><b>बाथरूम व सीढ़ियां:</b> 2 बाथ + 3.5' सीढ़ी</div>
+          </div>
+          <ul class="space-y-1 text-xs text-slate-800">
+            ${p.bedrooms.map(b => `<li class="px-2.5 py-1 rounded-lg bg-purple-50 font-bold">🛏️ ${b.name}: ${b.w}' × ${b.l}' • गेट ${b.doorSize} • खिड़की ${b.winW}'×4'</li>`).join('')}
+          </ul>
+          <div class="pt-1 flex flex-wrap gap-2">
+            <button type="button" onclick="applySamplePresetToProject(0)" class="candy-btn px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold text-xs shadow-lg">
+              ✅ इस सैंपल को मेरे प्रोजेक्ट में कॉपी करें
+            </button>
+            <button type="button" onclick="applySampleAndOpen3D(0)" class="candy-btn px-4 py-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-extrabold text-xs shadow-lg">
+              🧊 इसे 3D / 4D में देखें
+            </button>
+          </div>
+        </div>
+        <div class="md:col-span-6 bg-white rounded-2xl p-3 border-2 border-purple-200 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-extrabold text-purple-900">📐 संपूर्ण इंजीनियरिंग ब्लूप्रिंट (3 कमरे • मंदिर • पार्किंग • OTS • बाथ • सीढ़ी):</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">9" दीवार • RCC कॉलम</span>
+          </div>
+          <canvas id="sampleEngineeringCanvas" class="w-full h-[360px] rounded-xl border border-slate-300 bg-slate-50"></canvas>
+        </div>
+      `;
+      setTimeout(() => drawSampleEngineeringBlueprint(p), 20);
+    }
+
+    function drawSampleEngineeringBlueprint(p) {
+      const c = document.getElementById('sampleEngineeringCanvas');
+      if (!c) return;
+      const w = Math.max(320, c.clientWidth || 460);
+      const h = 360;
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, w, h);
+
+      const pad = 26;
+      const sc = Math.min((w - pad * 2) / p.w, (h - pad * 2.2) / p.d);
+      const ox = (w - p.w * sc) / 2;
+      const oy = (h - p.d * sc) / 2;
+      const pw = p.w * sc, pd = p.d * sc;
+
+      // Outer 9" Wall Boundary
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = 4;
+      ctx.fillRect(ox, oy, pw, pd);
+      ctx.strokeRect(ox, oy, pw, pd);
+
+      ctx.fillStyle = '#be123c';
+      ctx.font = 'bold 9.5px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`बाहरी दीवार: 9" | पीछे (Rear): ${p.w}' • RCC कॉलम: लाल डॉट`, ox + pw / 2, oy - 7);
+
+      const drawBox = (bx, by, bw, bh, fill, stroke, line1, line2, hasDoor, hasWin) => {
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.8;
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeRect(bx, by, bw, bh);
+
+        ctx.fillStyle = '#1e1b4b';
+        ctx.font = 'bold 8.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(line1, bx + bw / 2, by + bh / 2 - (line2 ? 2 : -3));
+        if (line2) {
+          ctx.fillStyle = '#334155';
+          ctx.font = '700 7.5px Inter, sans-serif';
+          ctx.fillText(line2, bx + bw / 2, by + bh / 2 + 8);
+        }
+        if (hasDoor) {
+          ctx.strokeStyle = '#d97706';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(bx + 4, by + bh);
+          ctx.lineTo(bx + 4, by + bh - Math.min(12, bh * 0.35));
+          ctx.stroke();
+        }
+        if (hasWin) {
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(bx + bw * 0.25, by - 2, bw * 0.5, 4);
+        }
+      };
+
+      // 1. Rear Left & Rear Right Bedrooms (Rooms 1 & 2)
+      const r1 = p.bedrooms[0];
+      const r2 = p.bedrooms[1];
+      const r1w = (p.w * 0.42) * sc, r1h = (p.d * 0.26) * sc;
+      const r2w = (p.w * 0.42) * sc, r2h = (p.d * 0.26) * sc;
+      drawBox(ox, oy, r1w, r1h, '#f3e8ff', '#7e22ce', `🛏️ ${r1.name} (${r1.w}'×${r1.l}')`, `गेट ${r1.doorSize} • विंडो ${r1.winW}'×4'`, true, true);
+      drawBox(ox + pw - r2w, oy, r2w, r2h, '#f3e8ff', '#7e22ce', `🛏️ ${r2.name} (${r2.w}'×${r2.l}')`, `गेट ${r2.doorSize} • विंडो ${r2.winW}'×4'`, true, true);
+
+      // 2. OTS Ventilation Shaft in between Rear Rooms
+      const otsW = pw - r1w - r2w;
+      const otsH = r1h * 0.52;
+      drawBox(ox + r1w, oy, otsW, otsH, '#fef9c3', '#ca8a04', '☀️ OTS जाल', "4'×4' वेंटिलेशन", false, false);
+      ctx.strokeStyle = '#ca8a04';
+      ctx.beginPath();
+      ctx.moveTo(ox + r1w, oy); ctx.lineTo(ox + r1w + otsW, oy + otsH);
+      ctx.moveTo(ox + r1w + otsW, oy); ctx.lineTo(ox + r1w, oy + otsH);
+      ctx.stroke();
+
+      // 3. Common & Attached Bath+WC
+      const bathH = r1h * 0.48;
+      drawBox(ox + r1w, oy + otsH, otsW, bathH, '#cffafe', '#0891b2', '🚿 लैट-बाथ', "5'×7' गेट 2.5'", true, false);
+
+      // 4. Mid-Left: Staircase + Under-Stair Bath
+      const stW = (p.w * 0.24) * sc, stH = (p.d * 0.24) * sc;
+      const midY = oy + r1h;
+      drawBox(ox, midY, stW, stH, '#e0e7ff', '#4338ca', '🪜 सीढ़ियां', "3.5'W + नीचे बाथ", true, false);
+      for (let s = 1; s <= 6; s++) {
+        ctx.beginPath();
+        ctx.moveTo(ox, midY + (stH / 7) * s);
+        ctx.lineTo(ox + stW, midY + (stH / 7) * s);
+        ctx.stroke();
+      }
+
+      // 5. Center: Large Living & Dining Hall
+      const hallW = (p.w * 0.48) * sc, hallH = (p.d * 0.30) * sc;
+      drawBox(ox + stW, midY, hallW, hallH, '#e0f2fe', '#0284c7', `🛋️ लिविंग हॉल (${p.hallW}'×${p.hallL}')`, 'सोफा + डाइनिंग • दीवार 4.5"', true, true);
+
+      // 6. Mid-Right: Kitchen
+      const kitW = pw - stW - hallW, kitH = (p.d * 0.22) * sc;
+      drawBox(ox + stW + hallW, midY, kitW, kitH, '#fef3c7', '#d97706', `🍳 किचन`, `${p.kitchenW}'×${p.kitchenL}' + विंडो`, true, true);
+
+      // 7. Right Below Kitchen: Pooja Mandir
+      const manH = (p.d * 0.14) * sc;
+      drawBox(ox + stW + hallW, midY + kitH, kitW, manH, '#ffedd5', '#ea580c', '🛕 पूजा मंदिर', "5'×6' ईशान कोण", true, false);
+
+      // 8. Front-Left: Bedroom 3
+      const frontY = oy + pd - (p.d * 0.18) * sc;
+      const b3W = (p.w * 0.46) * sc, b3H = (p.d * 0.22) * sc;
+      const r3 = p.bedrooms[2];
+      drawBox(ox, frontY - b3H, b3W, b3H, '#fce7f3', '#db2777', `🛏️ ${r3.name} (${r3.w}'×${r3.l}')`, `गेट ${r3.doorSize} • फ्रंट विंडो ${r3.winW}'`, true, true);
+
+      // 9. Front Setback: Car Parking Porch + Main Gate
+      const parkH = (p.d * 0.18) * sc;
+      drawBox(ox, frontY, pw, parkH, '#dcfce7', '#16a34a', `🚗 कार पार्किंग पोर्च + लॉन • 🚪 मेन गेट (9'×7')`, 'पानी टंकी व सेप्टिक टैंक प्रोविजन', false, false);
+
+      ctx.fillStyle = '#059669';
+      ctx.fillRect(ox + pw * 0.52, oy + pd - 3, pw * 0.36, 6);
+      ctx.fillStyle = '#064e3b';
+      ctx.font = 'bold 9.5px Inter, sans-serif';
+      ctx.fillText(`आगे (Front): ${p.w}' • बाएँ/दाएँ: ${p.d}' • छत ऊँचाई: ${p.ceil} ft`, ox + pw / 2, oy + pd + 14);
+
+      // Red RCC Columns
+      ctx.fillStyle = '#dc2626';
+      [0, 0.34, 0.68, 1].forEach(fx => {
+        [0, 0.26, 0.56, 0.82, 1].forEach(fy => {
+          ctx.fillRect(ox + pw * fx - 3, oy + pd * fy - 3, 6, 6);
+        });
+      });
+    }
+
+    function applySamplePresetToProject(idx) {
+      const p = SAMPLE_LIBRARY_PRESETS[0];
+      if (!p) return;
+      recordUndoSnapshot();
+      state.walls[0].lengthFt = p.w;
+      state.walls[1].lengthFt = p.w;
+      state.walls[2].lengthFt = p.d;
+      state.walls[3].lengthFt = p.d;
+      state.ceilingHeightFt = p.ceil;
+      state.cornerCutPos = 'none';
+      state.hasFirstFloor = false;
+      state.frontSetbackFt = p.frontSetbackFt || 9;
+      state.bedrooms = JSON.parse(JSON.stringify(p.bedrooms));
+      state.kitchenW = p.kitchenW;
+      state.kitchenL = p.kitchenL;
+      state.hallW = p.hallW;
+      state.hallL = p.hallL;
+      state.facilities = [...p.facilities];
+      p.facilities.forEach(fid => {
+        const cat = FACILITY_CATALOG.find(f => f.id === fid);
+        if (cat && !state.facilityDetails[fid]) {
+          state.facilityDetails[fid] = { w: cat.defaultW, l: cat.defaultL, loc: cat.defaultLoc, doorSwing: 'bottom-left' };
+        }
+      });
+      state.manualBoxes = {};
+      syncUIFromState();
+      updateAllOutputs(true);
+      closeSampleLibraryModal();
+      showToast(`🏛️ "${p.title}" आपके प्रोजेक्ट में कॉपी कर दिया गया!`, 'success');
+    }
+
+    function applySampleAndOpen3D(idx) {
+      applySamplePresetToProject(0);
+      switchDrawStyle('3d');
+    }
+
+    // =========================================================================
+    // 11. NAMED PROJECT SAVE/LOAD + PDF REPORT EXPORT & SMART PDF UPLOAD IMPORT
+    // =========================================================================
+    function refreshSavedProjectsDropdown() {
+      const sel = document.getElementById('savedProjectsSelect');
+      if (!sel) return;
+      let list = {};
+      try { list = JSON.parse(localStorage.getItem(SAVED_PROJECTS_KEY) || '{}'); } catch (e) {}
+      const names = Object.keys(list);
+      sel.innerHTML = '<option value="">-- सेव किए गए प्रोजेक्ट चुनें --</option>' +
+        names.map(n => `<option value="${n}">${n}</option>`).join('');
+    }
+
+    function saveNamedProject() {
+      const name = (state.clientName && state.clientName.trim()) || `प्रोजेक्ट ${new Date().toLocaleDateString('hi-IN')}`;
+      let list = {};
+      try { list = JSON.parse(localStorage.getItem(SAVED_PROJECTS_KEY) || '{}'); } catch (e) {}
+      list[name] = JSON.parse(JSON.stringify(state));
+      localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(list));
+      refreshSavedProjectsDropdown();
+      showToast(`💾 "${name}" सुरक्षित रूप से सेव हो गया!`, 'success');
+    }
+
+    function loadNamedProject() {
+      const sel = document.getElementById('savedProjectsSelect');
+      if (!sel || !sel.value) {
+        showToast('कृपया पहले लिस्ट से कोई सेव प्रोजेक्ट चुनें।', 'warn');
+        return;
+      }
+      let list = {};
+      try { list = JSON.parse(localStorage.getItem(SAVED_PROJECTS_KEY) || '{}'); } catch (e) {}
+      if (list[sel.value]) {
+        recordUndoSnapshot();
+        state = Object.assign(createSampleState(), list[sel.value]);
+        syncUIFromState();
+        updateAllOutputs(true);
+        showToast(`📂 "${sel.value}" लोड हो गया!`, 'success');
+      }
+    }
+
+    function deleteNamedProject() {
+      const sel = document.getElementById('savedProjectsSelect');
+      if (!sel || !sel.value) return;
+      let list = {};
+      try { list = JSON.parse(localStorage.getItem(SAVED_PROJECTS_KEY) || '{}'); } catch (e) {}
+      delete list[sel.value];
+      localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(list));
+      refreshSavedProjectsDropdown();
+      showToast('🗑️ सेव प्रोजेक्ट हटा दिया गया।', 'info');
+    }
+
+    function resetToDefaultProject() {
+      recordUndoSnapshot();
+      state = createSampleState();
+      syncUIFromState();
+      updateAllOutputs(true);
+      showToast('🔄 नया डिफ़ॉल्ट प्रोजेक्ट लोड किया गया!', 'success');
+    }
+
+    function downloadMapAsPNG() {
+      draw2DBlueprint();
+      const canvas = document.getElementById('blueprintCanvas');
+      if (!canvas) return;
+      const link = document.createElement('a');
+      const safeName = (state.clientName || 'VS_Planer_Naksha').replace(/[^a-zA-Z0-9_\u0900-\u097F-]+/g, '_');
+      link.download = `${safeName}_2D_Map.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('🖼️ 2D नक्शा PNG इमेज डाउनलोड हो गई!', 'success');
+    }
+
+    function generateAndPrintPDF() {
+      draw2DBlueprint();
+      const canvas = document.getElementById('blueprintCanvas');
+      const mapImgData = canvas ? canvas.toDataURL('image/png') : '';
+      const m = calculatePlotMetrics();
+      const boq = calculateBoqEstimate(m);
+      const vastu = calculateVastuScore();
+      const encodedJson = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+
+      const win = window.open('', '_blank', 'width=1050,height=900');
+      if (!win) {
+        showToast('⚠️ पॉप-अप ब्लॉक है! कृपया ब्राउज़र में पॉप-अप अनुमति दें या Ctrl+P दबाएं।', 'warn');
+        window.print();
+        return;
+      }
+
+      const wallsHtml = state.walls.map(w => `
+        <tr>
+          <td style="padding:6px;border:1px solid #cbd5e1;"><b>${w.title}</b></td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${formatWallLengthFromFt(w.lengthFt)} (${w.lengthFt.toFixed(2)} ft)</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${w.thicknessIn} Inch</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${w.heightFt} Feet</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${w.status}</td>
+        </tr>
+      `).join('');
+
+      const roomsTableHtml = state.bedrooms.map((b, i) => `
+        <tr>
+          <td style="padding:6px;border:1px solid #cbd5e1;"><b>${i + 1}. ${b.name}</b></td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${b.w}' × ${b.l}'</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;"><b>${computeRoomNetSqFt(b).toFixed(1)} Sq.Ft</b></td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${b.zone}</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">गेट: ${b.doorSize} (${b.doorSwing})</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${b.winCount} विंडो (${b.winW}' चौड़ी)</td>
+          <td style="padding:6px;border:1px solid #cbd5e1;">${b.cornerCut !== 'none' ? `${b.cornerCut} (${b.cornerCutW || 3}'×${b.cornerCutD || 3}')` : 'सीधा 90°'} ${b.note ? `• ${b.note}` : ''}</td>
+        </tr>
+      `).join('');
+
+      const facilitiesHtml = state.facilities.length > 0
+        ? state.facilities.map(fid => {
+            const cat = FACILITY_CATALOG.find(f => f.id === fid);
+            const det = state.facilityDetails[fid] || {};
+            return `<li><b>${cat ? cat.label : fid}:</b> साइज ${det.w || '-'}' × ${det.l || '-'}' (${((det.w || 0) * (det.l || 0)).toFixed(0)} Sq.Ft) • स्थान: ${det.loc || '-'}</li>`;
+          }).join('')
+        : '<li>कोई अतिरिक्त सुविधा चयनित नहीं</li>';
+
+      const sketchExtrasHtml = (state.sketchExtraItems || []).length > 0
+        ? state.sketchExtraItems.map(ex => `<li><b>स्केच अतिरिक्त ऑब्जेक्ट (${ex.name}):</b> ${ex.w}' × ${ex.l}' (${(ex.w * ex.l).toFixed(0)} Sq.Ft) • गेट: ${ex.doorSize || 'N/A'} • विंडो: ${ex.winW || 0}'</li>`).join('')
+        : '';
+
+      const riserIn = ((state.ceilingHeightFt * 12) / m.stairSteps).toFixed(1);
+
+      win.document.write(`
+        <!DOCTYPE html>
+        <html lang="hi">
+        <head>
+          <meta charset="UTF-8" />
+          <title>VS Planer - ${state.clientName || 'Makan Naksha'} Complete Engineering PDF</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #1e1b4b; padding: 18px; line-height: 1.45; }
+            h1 { color: #5b21b6; margin: 0 0 6px 0; font-size: 20px; }
+            h3 { color: #4c1d95; margin: 0 0 8px 0; font-size: 14px; border-bottom: 1px solid #e9d5ff; padding-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11.5px; }
+            .box { border: 2px solid #ddd6fe; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; page-break-inside: avoid; }
+            .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; }
+            img { max-width: 100%; max-height: 460px; object-fit: contain; display: block; margin: 6px auto; border: 2px solid #4c1d95; border-radius: 8px; }
+            .embed-token { font-size: 4px; color: #ffffff; word-break: break-all; user-select: none; }
+          </style>
+        </head>
+        <body>
+          <h1>🏛️ VS Planer • संपूर्ण 2D मकान नक्शा व इंजीनियरिंग डेटा शीट</h1>
+          <div class="box" style="background:#faf5ff;">
+            <div class="grid2">
+              <div><b>क्लाइंट / मकान मालिक नाम:</b> ${state.clientName || 'N/A'}</div>
+              <div><b>मुख्य द्वार की दिशा (Facing):</b> ${getResolvedLabel(state.facingSelect, state.facingCustom)} (वास्तु स्कोर: ${vastu.score}/100)</div>
+              <div><b>प्लॉट का कुल क्षेत्रफल:</b> ${m.grossSqFt.toFixed(1)} Sq.Ft | ${m.sqGaj.toFixed(2)} वर्ग गज | ${m.sqInches.toLocaleString('en-IN')} Sq.Inches</div>
+              <div><b>प्लॉट का कटा कोना (Corner Cut):</b> ${state.cornerCutPos === 'none' ? 'सीधा 90° प्लॉट (कोई कट नहीं)' : `${state.cornerCutPos} (${state.cornerCutW}' × ${state.cornerCutD}')`}</div>
+              <div><b>कुर्सी (Plinth) व कॉलम मानक:</b> Plinth ${state.plinthHeightFt || 3} ft • RCC कॉलम ${state.columnSizeSpec || '9"×12"'}</div>
+              <div><b>फर्श (Flooring Finish):</b> ${getResolvedLabel(state.flooringType, state.flooringCustom)}</div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>📐 2D आर्किटेक्चरल व इंजीनियरिंग नक्शा (RCC कॉलम, दरवाजे-खिड़की, दिशा व माप सहित)</h3>
+            ${mapImgData ? `<img src="${mapImgData}" alt="2D Floor Plan" />` : ''}
+          </div>
+
+          <div class="box">
+            <h3>🧱 1. चारों मुख्य बाहरी दीवारों का इंजीनियरिंग विवरण</h3>
+            <table>
+              <thead>
+                <tr style="background:#f3e8ff;">
+                  <th style="padding:6px;border:1px solid #cbd5e1;">दीवार</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">लंबाई</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">मोटाई (चौड़ाई)</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">ऊँचाई</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">दीवार स्थिति (खुली/बंद)</th>
+                </tr>
+              </thead>
+              <tbody>${wallsHtml}</tbody>
+            </table>
+          </div>
+
+          <div class="box">
+            <h3>🛏️ 2. सभी बेडरूम व कमरों का विस्तृत नाप, दरवाजे-खिड़कियां व कोना कट</h3>
+            <table>
+              <thead>
+                <tr style="background:#fce7f3;">
+                  <th style="padding:6px;border:1px solid #cbd5e1;">कमरे का नाम</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">साइज (W×L)</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">शुद्ध एरिया</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">स्थान (Zone)</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">दरवाजा (Gate)</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">खिड़की (Window)</th>
+                  <th style="padding:6px;border:1px solid #cbd5e1;">कोना व विशेष नोट</th>
+                </tr>
+              </thead>
+              <tbody>${roomsTableHtml}</tbody>
+            </table>
+          </div>
+
+          <div class="box">
+            <h3>🏠 3. किचन, हॉल, लैट-बाथ, सीढ़ियां, OTS, पार्किंग व 1st Floor विवरण</h3>
+            <ul style="font-size:12px;line-height:1.65;margin:4px 0;padding-left:18px;">
+              <li><b>किचन (Kitchen):</b> ${state.kitchenW}' × ${state.kitchenL}' (${(state.kitchenW * state.kitchenL).toFixed(0)} Sq.Ft) • स्थान: ${getResolvedLabel(state.kitchenLoc, state.kitchenCustomNote)}</li>
+              <li><b>लिविंग हॉल / लॉबी:</b> ${state.hallW}' × ${state.hallL}' (${(state.hallW * state.hallL).toFixed(0)} Sq.Ft) • प्रकार: ${getResolvedLabel(state.hallType, state.hallCustomNote)}</li>
+              <li><b>लैट-बाथ व्यवस्था:</b> (1) सीढ़ियों के नीचे: <b>${state.bathUnderStairs ? 'हाँ (उपलब्ध)' : 'नहीं'}</b> | (2) अलग लैट-बाथ: <b>${state.bathSeparate ? `हाँ (${state.sepBathW}'×${state.sepBathL}' = ${(state.sepBathW * state.sepBathL).toFixed(0)} Sq.Ft • स्थान: ${getResolvedLabel(state.sepBathLoc, state.bathCustom)})` : 'नहीं'}</b></li>
+              <li><b>सीढ़ियां (Staircase) व छत ऊँचाई:</b> छत RCC ऊँचाई <b>${state.ceilingHeightFt} Feet</b> • सीढ़ी चौड़ाई ${state.stairW}' • कुल <b>${m.stairSteps} स्टेप्स</b> (@ ${riserIn}" राइजर) • स्थान: ${state.stairLoc}</li>
+              <li><b>OTS वेंटिलेशन जाल:</b> ${state.otsW > 0 ? `${state.otsW}' × ${state.otsL}' (${(state.otsW * state.otsL).toFixed(0)} Sq.Ft) • स्थान: ${getResolvedLabel(state.otsLoc, state.otsCustomNote)}` : 'नहीं'}</li>
+              <li><b>आगे छूटी जगह, छज्जा, मेन गेट व पार्किंग:</b> सेटबैक ${state.frontSetbackFt} ft • छज्जा ${state.chhajjaFt} ft • मेन गेट ${state.mainGateW}' × ${state.mainGateH}' • पार्किंग: ${getResolvedLabel(state.parkingType, state.parkingCustom)}</li>
+              <li><b>1st Floor (पहली मंजिल) योजना:</b> ${state.hasFirstFloor ? `हाँ — ${state.firstFloorMode === 'same' ? 'ग्राउंड फ्लोर जैसा अटैच (Same)' : 'अलग से निर्मित (Separate)'} ${state.firstFloorCustomNote ? `(${state.firstFloorCustomNote})` : ''}` : 'केवल ग्राउंड फ्लोर (फ्यूचर कॉलम प्रोविजन)'}</li>
+            </ul>
+          </div>
+
+          <div class="box">
+            <h3>✨ 4. चयनित अतिरिक्त सुविधाएं, अनुमानित मटेरियल (BOQ) व विशेष नोट्स</h3>
+            <div style="font-size:11.5px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
+              <b>📊 इंजीनियरिंग मटेरियल व पॉइंट एस्टीमेट (${boq.floors === 2 ? 'G+1 कुल ' + boq.builtSqFt.toFixed(0) : 'Ground ' + boq.builtSqFt.toFixed(0)} Sq.Ft):</b>
+              ईंटें: ~${boq.bricks.toLocaleString('en-IN')} नग | सीमेंट: ~${boq.cementBags} बैग | सरिया (TMT): ~${(boq.steelKg / 1000).toFixed(2)} टन | इलेक्ट्रिक पॉइंट: ${boq.elecPoints} | प्लंबिंग पॉइंट: ${boq.plumbPoints}
+            </div>
+            <ul style="font-size:12px;line-height:1.65;margin:4px 0;padding-left:18px;">
+              ${facilitiesHtml}
+              ${sketchExtrasHtml}
+              ${state.customPoints.map(pt => `<li><b>विशेष शर्त / नोट:</b> ${pt}</li>`).join('')}
+            </ul>
+          </div>
+
+          <div class="embed-token">VSPLANER_DATA_START:${encodedJson}:VSPLANER_DATA_END</div>
+          <script>
+            window.onload = function() { setTimeout(function() { window.print(); }, 350); };
+          <\/script>
+        </body>
+        </html>
+      `);
+      win.document.close();
+      showToast('📄 संपूर्ण इंजीनियरिंग डेटा व नक्शे सहित PDF तैयार!', 'success');
+    }
+
+    function handlePdfFileUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const text = e.target.result || '';
+          const match = text.match(/VSPLANER_DATA_START:([A-Za-z0-9+/=]+):VSPLANER_DATA_END/);
+          if (!match || !match[1]) {
+            showToast('⚠️ इस PDF में VS Planer का एम्बेड डेटा नहीं मिला। कृपया VS Planer से सेव की गई PDF चुनें।', 'warn');
+            return;
+          }
+          const jsonStr = decodeURIComponent(escape(atob(match[1])));
+          const importedState = JSON.parse(jsonStr);
+          recordUndoSnapshot();
+          state = Object.assign(createSampleState(), importedState);
+          syncUIFromState();
+          updateAllOutputs(true);
+          showToast('🎉 PDF से पूरा डेटा और 2D/3D नक्शा ऑटोमैटिक लोड हो गया!', 'success');
+        } catch (err) {
+          showToast('❌ PDF डेटा पढ़ने में त्रुटि हुई।', 'warn');
+        }
+      };
+      reader.readAsText(file, 'latin1');
+      event.target.value = '';
+    }
+
+    // =========================================================================
+    // 12. INITIALIZATION ON WINDOW LOAD
+    // =========================================================================
+    window.addEventListener('resize', () => {
+      draw2DBlueprint();
+      if (currentDrawStyle === '3d' && threeRenderer && threeCamera) {
+        const mount = document.getElementById('threeDMount');
+        if (mount && mount.clientWidth > 0) {
+          threeRenderer.setSize(mount.clientWidth, mount.clientHeight);
+          threeCamera.aspect = mount.clientWidth / mount.clientHeight;
+          threeCamera.updateProjectionMatrix();
+        }
+      }
+    });
+
+    window.onload = function () {
+      syncUIFromState();
+      refreshSavedProjectsDropdown();
+      setupInteractive2DCanvas();
+      recordUndoSnapshot();
+      updateAllOutputs(false);
+    };
+  </script>
+</body>
+</html>
